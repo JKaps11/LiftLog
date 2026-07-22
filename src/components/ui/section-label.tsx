@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 function SectionLabel({ className, ...props }: React.ComponentProps<"h2">) {
   return (
     <h2
+      data-slot="section-label"
       className={cn(
         "mb-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase",
         className

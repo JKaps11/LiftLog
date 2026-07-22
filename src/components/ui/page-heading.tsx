@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 function PageHeading({ className, ...props }: React.ComponentProps<"h1">) {
   return (
     <h1
+      data-slot="page-heading"
       className={cn(
         "font-heading text-4xl leading-none tracking-wide text-foreground uppercase",
         className

@@ -51,6 +51,9 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Light-mode fallback from the shadcn scaffold — inert while html.dark is
+   force-applied (see index.html) and there's no toggle. Update this block
+   too if a light/dark toggle is ever added. */
 :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
