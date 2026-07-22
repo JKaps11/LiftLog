@@ -44,4 +44,50 @@ const LIFTLOG: Theme = {
   },
 }
 
-export const THEMES: Theme[] = [LIFTLOG]
+/**
+ * Pasted from tweakcn — only the .dark values map onto our vars, since the
+ * app is dark-mode only. Font/shadow/tracking tokens from that export are
+ * intentionally not carried over: this app doesn't drive shadows or letter
+ * tracking from CSS vars, and fonts stay fixed to the LiftLog identity
+ * (Bebas Neue/Geist/JetBrains Mono) rather than varying per theme.
+ */
+const LIME: Theme = {
+  id: 'lime',
+  name: 'Lime',
+  colors: {
+    background: 'oklch(0.1288 0.0406 264.6952)',
+    foreground: 'oklch(0.9842 0.0034 247.8575)',
+    card: 'oklch(0.2077 0.0398 265.7549)',
+    cardForeground: 'oklch(0.9842 0.0034 247.8575)',
+    popover: 'oklch(0.2077 0.0398 265.7549)',
+    popoverForeground: 'oklch(0.9842 0.0034 247.8575)',
+    primary: 'oklch(0.8871 0.2122 128.5041)',
+    primaryForeground: 'oklch(0 0 0)',
+    secondary: 'oklch(0.2795 0.0368 260.0310)',
+    secondaryForeground: 'oklch(0.9842 0.0034 247.8575)',
+    muted: 'oklch(0.2795 0.0368 260.0310)',
+    mutedForeground: 'oklch(0.7107 0.0351 256.7878)',
+    accent: 'oklch(0.3925 0.0896 152.5353)',
+    accentForeground: 'oklch(0.8871 0.2122 128.5041)',
+    destructive: 'oklch(0.4437 0.1613 26.8994)',
+    border: 'oklch(0.2795 0.0368 260.0310)',
+    input: 'oklch(0.2795 0.0368 260.0310)',
+    ring: 'oklch(0.8871 0.2122 128.5041)',
+    chart1: 'oklch(0.8871 0.2122 128.5041)',
+    chart2: 'oklch(0.6231 0.1880 259.8145)',
+    chart3: 'oklch(0.7227 0.1920 149.5793)',
+    chart4: 'oklch(0.6268 0.2325 303.9004)',
+    chart5: 'oklch(0.7686 0.1647 70.0804)',
+    sidebar: 'oklch(0.1288 0.0406 264.6952)',
+    sidebarForeground: 'oklch(0.9842 0.0034 247.8575)',
+    sidebarPrimary: 'oklch(0.8871 0.2122 128.5041)',
+    sidebarPrimaryForeground: 'oklch(0 0 0)',
+    sidebarAccent: 'oklch(0.2795 0.0368 260.0310)',
+    sidebarAccentForeground: 'oklch(0.9842 0.0034 247.8575)',
+    sidebarBorder: 'oklch(0.2795 0.0368 260.0310)',
+    sidebarRing: 'oklch(0.8871 0.2122 128.5041)',
+    radius: '1rem',
+  },
+}
+
+export const THEMES: Theme[] = [LIFTLOG, LIME]
