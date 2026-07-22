@@ -3,14 +3,63 @@ import { Button } from '@/components/ui/button'
 import { store } from '@/store/instance'
 import type { ExportedData } from '@/store'
 
-function isExportedData(value: unknown): value is ExportedData {
-  if (typeof value !== 'object' || value === null) return false
-  const data = value as Record<string, unknown>
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isExercise(value: unknown): boolean {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string'
+}
+
+function isWorkout(value: unknown): boolean {
   return (
-    data.version === 1 &&
-    Array.isArray(data.exercises) &&
-    Array.isArray(data.workouts) &&
-    Array.isArray(data.sessions)
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    Array.isArray(value.exerciseIds) &&
+    value.exerciseIds.every((id) => typeof id === 'string')
+  )
+}
+
+function isSessionSet(value: unknown): boolean {
+  return isRecord(value) && typeof value.weight === 'number' && typeof value.reps === 'number'
+}
+
+function isSessionExerciseEntry(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.exerciseId === 'string' &&
+    typeof value.exerciseNameAtLogTime === 'string' &&
+    Array.isArray(value.sets) &&
+    value.sets.every(isSessionSet)
+  )
+}
+
+function isSession(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.workoutId === 'string' &&
+    typeof value.workoutNameSnapshot === 'string' &&
+    Array.isArray(value.exercises) &&
+    value.exercises.every(isSessionExerciseEntry) &&
+    typeof value.startTime === 'string' &&
+    (value.endTime === null || typeof value.endTime === 'string') &&
+    typeof value.notes === 'string' &&
+    typeof value.date === 'string'
+  )
+}
+
+function isExportedData(value: unknown): value is ExportedData {
+  if (!isRecord(value)) return false
+  return (
+    value.version === 1 &&
+    Array.isArray(value.exercises) &&
+    value.exercises.every(isExercise) &&
+    Array.isArray(value.workouts) &&
+    value.workouts.every(isWorkout) &&
+    Array.isArray(value.sessions) &&
+    value.sessions.every(isSession)
   )
 }
 
