@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { Activity, Database, Dumbbell, History, ListChecks } from 'lucide-react'
+import { Activity, Database, Dumbbell, History, ListChecks, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DataPage } from '@/features/data/DataPage'
 import { ExercisesPage } from '@/features/exercises/ExercisesPage'
 import { SessionHistoryPage } from '@/features/sessions/SessionHistoryPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
+import { ThemePage } from '@/features/theme/ThemePage'
 import { WorkoutsPage } from '@/features/workouts/WorkoutsPage'
+import { useTheme } from '@/theme/useTheme'
 
-type Tab = 'session' | 'history' | 'workouts' | 'exercises' | 'data'
+type Tab = 'session' | 'history' | 'workouts' | 'exercises' | 'data' | 'theme'
 
 const TABS: { id: Tab; label: string; icon: typeof Dumbbell }[] = [
   { id: 'session', label: 'Session', icon: Dumbbell },
@@ -15,10 +17,12 @@ const TABS: { id: Tab; label: string; icon: typeof Dumbbell }[] = [
   { id: 'workouts', label: 'Workouts', icon: ListChecks },
   { id: 'exercises', label: 'Exercises', icon: Activity },
   { id: 'data', label: 'Data', icon: Database },
+  { id: 'theme', label: 'Theme', icon: Palette },
 ]
 
 function App() {
   const [tab, setTab] = useState<Tab>('session')
+  const { themeId, setThemeId, themes } = useTheme()
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -28,6 +32,9 @@ function App() {
         {tab === 'workouts' && <WorkoutsPage />}
         {tab === 'exercises' && <ExercisesPage />}
         {tab === 'data' && <DataPage />}
+        {tab === 'theme' && (
+          <ThemePage themes={themes} themeId={themeId} onSelect={setThemeId} />
+        )}
       </main>
 
       <nav
