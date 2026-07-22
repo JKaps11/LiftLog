@@ -1,32 +1,33 @@
-# React + TypeScript + Vite
+# LiftLog
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A minimal, single-user mobile PWA for building Workouts and logging how you actually perform them over time — no accounts, no backend, no subscriptions. Everything runs on-device and works fully offline.
 
-Currently, two official plugins are available:
+## What it does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Build reusable **Workouts** from a shared **Exercise** list (a seeded ~100 common lifts, plus your own).
+- Start a **Session** against a Workout and log **Sets** (weight × reps) per Exercise — fields pre-fill from your last time doing that Workout.
+- Browse, edit, or delete past Sessions in **History**.
+- **Export/Import** your full dataset as a single JSON file, to back it up or move it to a new phone.
 
-## React Compiler
+See [`CONTEXT.md`](./CONTEXT.md) for the domain vocabulary (Workout / Session / Exercise / Set) and [`docs/adr/`](./docs/adr/) for the reasoning behind key decisions, like why a Session snapshots its Workout instead of referencing it live.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Stack
 
-## Expanding the Oxlint configuration
+React + TypeScript + Vite, styled with Tailwind CSS + shadcn/ui. Data lives in IndexedDB via Dexie, behind a Dexie-independent `Store` module (`src/store/`) that the UI is built and tested against. `vite-plugin-pwa` handles installability and offline support. No server, no auth.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Getting started
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev       # dev server with HMR
+npm test          # run the Store's test suite (in-memory fake persistence, no DOM)
+npm run lint       # oxlint
+npm run build      # typecheck + production build to dist/
+npm run preview    # serve the production build locally
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+To try it on a phone during development, run `npm run dev -- --host` and open `http://<your-computer's-LAN-IP>:5173` from the phone's browser (same Wi-Fi network).
+
+## Deploying
+
+The production build (`npm run build`) is fully static — deploy `dist/` anywhere that serves static files (Vercel, Netlify, GitHub Pages, Cloudflare Pages, ...). Once deployed, open the URL on your phone and use "Add to Home Screen" — after that first load it's installed and works offline, since the service worker caches the app and all data stays in IndexedDB on-device.
