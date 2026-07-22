@@ -246,6 +246,50 @@ export class Store {
     )
   }
 
+  async deleteSet(sessionId: string, exerciseId: string, setIndex: number): Promise<Session> {
+    const session = await this.requireSession(sessionId)
+    const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
+    if (!entry) throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
+    if (setIndex < 0 || setIndex >= entry.sets.length) {
+      throw new Error(`Set index out of range: ${setIndex}`)
+    }
+
+    const exercises = session.exercises.map((e) =>
+      e.exerciseId === exerciseId
+        ? { ...e, sets: e.sets.filter((_, i) => i !== setIndex) }
+        : e
+    )
+    const updated: Session = { ...session, exercises }
+    await this.sessions.put(updated)
+    return updated
+  }
+
+  async updateSessionTimes(
+    sessionId: string,
+    updates: { startTime?: string; endTime?: string }
+  ): Promise<Session> {
+    const session = await this.requireSession(sessionId)
+    const updated: Session = {
+      ...session,
+      startTime: updates.startTime ?? session.startTime,
+      endTime: updates.endTime ?? session.endTime,
+    }
+    await this.sessions.put(updated)
+    return updated
+  }
+
+  async listSessions(): Promise<Session[]> {
+    const all = await this.sessions.toArray()
+    // Ties on startTime break toward insertion order (later logged first) by
+    // reversing before a stable sort, rather than toward array/table order,
+    // which storage doesn't guarantee.
+    return [...all].reverse().sort((a, b) => b.startTime.localeCompare(a.startTime))
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    await this.sessions.delete(id)
+  }
+
   private async requireSession(id: string): Promise<Session> {
     const session = await this.sessions.get(id)
     if (!session) throw new Error(`Session not found: ${id}`)

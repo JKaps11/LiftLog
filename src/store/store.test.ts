@@ -420,6 +420,94 @@ describe('Store', () => {
     })
   })
 
+  describe('deleteSet', () => {
+    it('removes a Set at the given index from an Exercise within a Session', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
+      const logged = await store.logSet(session.id, bench.id, { weight: 145, reps: 6 })
+
+      const updated = await store.deleteSet(logged.id, bench.id, 0)
+
+      expect(updated.exercises[0].sets).toEqual([{ weight: 145, reps: 6 }])
+    })
+
+    it('rejects deleting a Set at an out-of-range index', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await expect(store.deleteSet(session.id, bench.id, 0)).rejects.toThrow()
+    })
+
+    it('rejects deleting a Set for a nonexistent Session', async () => {
+      await expect(store.deleteSet('missing-id', 'exercise-id', 0)).rejects.toThrow()
+    })
+  })
+
+  describe('updateSessionTimes', () => {
+    it('updates the start and/or end time of a Session', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.updateSessionTimes(session.id, {
+        startTime: '2026-01-01T10:00:00.000Z',
+        endTime: '2026-01-01T11:00:00.000Z',
+      })
+
+      expect(updated.startTime).toBe('2026-01-01T10:00:00.000Z')
+      expect(updated.endTime).toBe('2026-01-01T11:00:00.000Z')
+    })
+
+    it('leaves fields unspecified in the update untouched', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+      const ended = await store.endSession(session.id, '2026-01-01T11:00:00.000Z')
+
+      const updated = await store.updateSessionTimes(ended.id, {
+        startTime: '2026-01-01T10:00:00.000Z',
+      })
+
+      expect(updated.startTime).toBe('2026-01-01T10:00:00.000Z')
+      expect(updated.endTime).toBe('2026-01-01T11:00:00.000Z')
+    })
+
+    it('rejects updating times for a nonexistent Session', async () => {
+      await expect(
+        store.updateSessionTimes('missing-id', { startTime: '2026-01-01T10:00:00.000Z' })
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('listSessions', () => {
+    it('lists all Sessions, most recently started first', async () => {
+      const pushDay = await store.createWorkout('Push Day', [])
+      const pullDay = await store.createWorkout('Pull Day', [])
+      const first = await store.startSession(pushDay.id)
+      const second = await store.startSession(pullDay.id)
+
+      const all = await store.listSessions()
+
+      expect(all.map((s) => s.id)).toEqual([second.id, first.id])
+    })
+
+    it('returns an empty list when there are no Sessions', async () => {
+      expect(await store.listSessions()).toEqual([])
+    })
+  })
+
+  describe('deleteSession', () => {
+    it('removes the Session from the list', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      await store.deleteSession(session.id)
+
+      expect(await store.listSessions()).toEqual([])
+    })
+  })
+
   describe('resolveExerciseDisplayName', () => {
     it('prefers the live Exercise name when the Exercise still exists (renames follow through to past Sessions)', async () => {
       const bench = await store.createExercise('Bemch Press')

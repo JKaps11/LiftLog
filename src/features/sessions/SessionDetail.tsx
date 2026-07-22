@@ -2,16 +2,18 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { store } from '@/store/instance'
 import type { Exercise, Session } from '@/store'
+import { fromDatetimeLocalValue, toDatetimeLocalValue } from './dateTime'
 import { SessionExerciseCard } from './SessionExerciseCard'
 
-interface ActiveSessionProps {
+interface SessionDetailProps {
   session: Session
   exercises: Exercise[]
   onChange: (session: Session) => void
-  onEnd: () => void
+  onDelete: () => void
+  onBack: () => void
 }
 
-export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSessionProps) {
+export function SessionDetail({ session, exercises, onChange, onDelete, onBack }: SessionDetailProps) {
   const [notes, setNotes] = useState(session.notes)
 
   async function handleAddSet(exerciseId: string) {
@@ -45,12 +47,63 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
     onChange(updated)
   }
 
+  async function handleStartTimeChange(value: string) {
+    if (!value) return
+    const updated = await store.updateSessionTimes(session.id, {
+      startTime: fromDatetimeLocalValue(value),
+    })
+    onChange(updated)
+  }
+
+  async function handleEndTimeChange(value: string) {
+    if (!value) return
+    const updated = await store.updateSessionTimes(session.id, {
+      endTime: fromDatetimeLocalValue(value),
+    })
+    onChange(updated)
+  }
+
+  async function handleDelete() {
+    await store.deleteSession(session.id)
+    onDelete()
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
+      <div className="flex items-center justify-between">
+        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+          Back
+        </Button>
+        <Button type="button" variant="destructive" size="sm" onClick={handleDelete}>
+          Delete Session
+        </Button>
+      </div>
+
       <h1 className="text-2xl font-semibold">{session.workoutNameSnapshot}</h1>
 
+      <div className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+          Start time
+          <input
+            type="datetime-local"
+            value={toDatetimeLocalValue(session.startTime)}
+            onChange={(event) => handleStartTimeChange(event.target.value)}
+            className="h-8 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+          End time
+          <input
+            type="datetime-local"
+            value={session.endTime ? toDatetimeLocalValue(session.endTime) : ''}
+            onChange={(event) => handleEndTimeChange(event.target.value)}
+            className="h-8 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+        </label>
+      </div>
+
       {session.exercises.length === 0 ? (
-        <p className="text-muted-foreground">This Workout has no Exercises yet.</p>
+        <p className="text-muted-foreground">This Session has no Exercises.</p>
       ) : (
         <ul className="flex flex-col gap-4">
           {session.exercises.map((entry) => (
@@ -77,8 +130,6 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
           className="w-full rounded-lg border border-input bg-transparent p-2.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
       </div>
-
-      <Button onClick={onEnd}>End Session</Button>
     </main>
   )
 }
