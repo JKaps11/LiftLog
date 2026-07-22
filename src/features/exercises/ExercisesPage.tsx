@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PageHeading } from '@/components/ui/page-heading'
 import { store } from '@/store/instance'
 import type { Exercise } from '@/store'
 
@@ -50,8 +51,8 @@ export function ExercisesPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-md flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Exercises</h1>
+    <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
+      <PageHeading>Exercises</PageHeading>
 
       <form onSubmit={handleAdd} className="flex gap-2">
         <Input

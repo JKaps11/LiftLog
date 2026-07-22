@@ -1,4 +1,6 @@
 import { Button } from '@/components/ui/button'
+import { PageHeading } from '@/components/ui/page-heading'
+import { SectionLabel } from '@/components/ui/section-label'
 import type { Exercise, Session } from '@/store'
 import { SessionExerciseCard } from './SessionExerciseCard'
 import { useSessionEditing } from './useSessionEditing'
@@ -16,7 +18,7 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">{session.workoutNameSnapshot}</h1>
+      <PageHeading>{session.workoutNameSnapshot}</PageHeading>
 
       {session.exercises.length === 0 ? (
         <p className="text-muted-foreground">This Workout has no Exercises yet.</p>
@@ -36,7 +38,7 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
       )}
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Notes</h2>
+        <SectionLabel>Notes</SectionLabel>
         <textarea
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
@@ -47,7 +49,9 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
         />
       </div>
 
-      <Button onClick={onEnd}>End Session</Button>
+      <Button size="lg" className="h-12 text-base" onClick={onEnd}>
+        End Session
+      </Button>
     </main>
   )
 }

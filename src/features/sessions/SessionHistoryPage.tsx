@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { PageHeading } from '@/components/ui/page-heading'
 import { store } from '@/store/instance'
 import type { Exercise, Session } from '@/store'
 import { formatSessionTimeRange } from './dateTime'
@@ -53,7 +54,7 @@ export function SessionHistoryPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">History</h1>
+      <PageHeading>History</PageHeading>
 
       {sessions.length === 0 ? (
         <p className="text-muted-foreground">No Sessions logged yet.</p>
@@ -64,10 +65,10 @@ export function SessionHistoryPage() {
               <button
                 type="button"
                 onClick={() => setView({ mode: 'detail', session })}
-                className="flex w-full flex-col gap-0.5 rounded-lg border border-border p-2.5 text-left transition-colors hover:bg-muted"
+                className="flex w-full flex-col gap-0.5 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted"
               >
                 <span className="font-medium">{session.workoutNameSnapshot}</span>
-                <span className="text-sm text-muted-foreground">
+                <span className="font-mono text-sm text-muted-foreground tabular-nums">
                   {formatSessionTimeRange(session.startTime, session.endTime)}
                 </span>
                 {session.notes && (

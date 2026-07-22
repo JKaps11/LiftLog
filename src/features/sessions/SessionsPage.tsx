@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { PageHeading } from '@/components/ui/page-heading'
 import { store } from '@/store/instance'
 import type { Exercise, Session, Workout } from '@/store'
 import { ActiveSession } from './ActiveSession'
@@ -55,7 +56,7 @@ export function SessionsPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Start a Session</h1>
+      <PageHeading>Start a Session</PageHeading>
 
       {workouts.length === 0 ? (
         <p className="text-muted-foreground">No Workouts yet — create one first.</p>
@@ -64,12 +65,10 @@ export function SessionsPage() {
           {workouts.map((workout) => (
             <li
               key={workout.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-border p-2.5"
+              className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3"
             >
               <span className="font-medium">{workout.name}</span>
-              <Button size="sm" onClick={() => handleStart(workout.id)}>
-                Start
-              </Button>
+              <Button onClick={() => handleStart(workout.id)}>Start</Button>
             </li>
           ))}
         </ul>

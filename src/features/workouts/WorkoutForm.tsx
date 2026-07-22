@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { SectionLabel } from '@/components/ui/section-label'
 import type { Exercise, Workout } from '@/store'
 import { exerciseNameById } from './exerciseLookup'
 
@@ -55,7 +56,7 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
       />
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Exercises in order</h2>
+        <SectionLabel>Exercises in order</SectionLabel>
         {exerciseIds.length === 0 ? (
           <p className="text-sm text-muted-foreground">No exercises selected yet.</p>
         ) : (
@@ -102,7 +103,7 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Add exercises</h2>
+        <SectionLabel>Add exercises</SectionLabel>
         <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
           {allExercises.map((exercise) => (
             <li key={exercise.id} className="flex items-center gap-2 px-2.5 py-1">

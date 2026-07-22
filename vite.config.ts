@@ -16,8 +16,8 @@ export default defineConfig({
         name: 'Workout Logs',
         short_name: 'Workouts',
         description: 'Minimal personal workout creation and tracking',
-        theme_color: '#171717',
-        background_color: '#171717',
+        theme_color: '#18191c',
+        background_color: '#18191c',
         display: 'standalone',
         start_url: '/',
         icons: [

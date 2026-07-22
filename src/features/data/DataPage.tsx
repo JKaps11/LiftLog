@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { PageHeading } from '@/components/ui/page-heading'
+import { SectionLabel } from '@/components/ui/section-label'
 import { store } from '@/store/instance'
 import type { ExportedData } from '@/store'
 
@@ -112,25 +114,25 @@ export function DataPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Data</h1>
+      <PageHeading>Data</PageHeading>
 
-      <div className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
-        <h2 className="font-medium">Export</h2>
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
+        <SectionLabel className="mb-0">Export</SectionLabel>
         <p className="text-sm text-muted-foreground">
           Save all your Exercises, Workouts, and Sessions to a JSON file.
         </p>
-        <Button className="self-start" onClick={handleExport}>
+        <Button className="mt-1 self-start" onClick={handleExport}>
           Export data
         </Button>
       </div>
 
-      <div className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
-        <h2 className="font-medium">Import</h2>
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
+        <SectionLabel className="mb-0">Import</SectionLabel>
         <p className="text-sm text-muted-foreground">
           Restore from a previously exported file. This replaces all data currently on this
           device.
         </p>
-        <Button className="self-start" variant="outline" onClick={handleImportClick}>
+        <Button className="mt-1 self-start" variant="outline" onClick={handleImportClick}>
           Import data
         </Button>
         <input

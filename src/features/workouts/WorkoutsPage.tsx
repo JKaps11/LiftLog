@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { PageHeading } from '@/components/ui/page-heading'
 import { store } from '@/store/instance'
 import { isSamePermutation, type Exercise, type Workout } from '@/store'
 import { exerciseNameById } from './exerciseLookup'
@@ -41,7 +42,7 @@ export function WorkoutsPage() {
   if (view.mode === 'new') {
     return (
       <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
-        <h1 className="text-2xl font-semibold">New Workout</h1>
+        <PageHeading>New Workout</PageHeading>
         <WorkoutForm
           allExercises={exercises}
           onSave={async (name, exerciseIds) => {
@@ -58,7 +59,7 @@ export function WorkoutsPage() {
   if (view.mode === 'edit') {
     return (
       <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
-        <h1 className="text-2xl font-semibold">Edit Workout</h1>
+        <PageHeading>Edit Workout</PageHeading>
         <WorkoutForm
           allExercises={exercises}
           workout={view.workout}
@@ -84,7 +85,7 @@ export function WorkoutsPage() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Workouts</h1>
+        <PageHeading>Workouts</PageHeading>
         <Button onClick={() => setView({ mode: 'new' })}>New Workout</Button>
       </div>
 

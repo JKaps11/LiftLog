@@ -1,5 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PageHeading } from '@/components/ui/page-heading'
+import { SectionLabel } from '@/components/ui/section-label'
 import { store } from '@/store/instance'
 import type { Exercise, Session } from '@/store'
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from './dateTime'
@@ -58,25 +60,27 @@ export function SessionDetail({ session, exercises, onChange, onDelete, onBack }
       </div>
 
       <div>
-        <h1 className="text-2xl font-semibold">{session.workoutNameSnapshot}</h1>
-        <p className="text-sm text-muted-foreground">{dateLabel}</p>
+        <PageHeading>{session.workoutNameSnapshot}</PageHeading>
+        <p className="mt-1 text-sm text-muted-foreground">{dateLabel}</p>
       </div>
 
       <div className="flex flex-col gap-2">
-        <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+        <label className="flex flex-col gap-1 text-xs font-medium tracking-widest text-muted-foreground uppercase">
           Start time
           <Input
             type="datetime-local"
             value={toDatetimeLocalValue(session.startTime)}
             onChange={(event) => handleStartTimeChange(event.target.value)}
+            className="font-mono text-sm normal-case tracking-normal"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-muted-foreground">
+        <label className="flex flex-col gap-1 text-xs font-medium tracking-widest text-muted-foreground uppercase">
           End time
           <Input
             type="datetime-local"
             value={session.endTime ? toDatetimeLocalValue(session.endTime) : ''}
             onChange={(event) => handleEndTimeChange(event.target.value)}
+            className="font-mono text-sm normal-case tracking-normal"
           />
         </label>
       </div>
@@ -99,7 +103,7 @@ export function SessionDetail({ session, exercises, onChange, onDelete, onBack }
       )}
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Notes</h2>
+        <SectionLabel>Notes</SectionLabel>
         <textarea
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
