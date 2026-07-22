@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { DataPage } from '@/features/data/DataPage'
 import { ExercisesPage } from '@/features/exercises/ExercisesPage'
 import { SessionHistoryPage } from '@/features/sessions/SessionHistoryPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { WorkoutsPage } from '@/features/workouts/WorkoutsPage'
 
-type Tab = 'session' | 'history' | 'workouts' | 'exercises'
+type Tab = 'session' | 'history' | 'workouts' | 'exercises' | 'data'
 
 function App() {
   const [tab, setTab] = useState<Tab>('session')
@@ -41,11 +42,19 @@ function App() {
         >
           Exercises
         </Button>
+        <Button
+          variant={tab === 'data' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('data')}
+        >
+          Data
+        </Button>
       </nav>
       {tab === 'session' && <SessionsPage />}
       {tab === 'history' && <SessionHistoryPage />}
       {tab === 'workouts' && <WorkoutsPage />}
       {tab === 'exercises' && <ExercisesPage />}
+      {tab === 'data' && <DataPage />}
     </div>
   )
 }

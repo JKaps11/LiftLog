@@ -12,4 +12,5 @@ export interface EntityTable<T> {
   put(entity: T): Promise<unknown>
   delete(id: string): Promise<void>
   bulkAdd(entities: T[]): Promise<unknown>
+  clear(): Promise<void>
 }

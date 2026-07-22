@@ -41,3 +41,11 @@ export interface Session {
   notes: string
   date: string
 }
+
+/** The full local dataset, as produced by Store.exportData and consumed by Store.importData. */
+export interface ExportedData {
+  version: 1
+  exercises: Exercise[]
+  workouts: Workout[]
+  sessions: Session[]
+}

@@ -1,8 +1,22 @@
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
 import type { EntityTable } from './table'
-import type { Exercise, Session, SessionExerciseEntry, SessionSet, Workout } from './types'
+import type {
+  Exercise,
+  ExportedData,
+  Session,
+  SessionExerciseEntry,
+  SessionSet,
+  Workout,
+} from './types'
 
-export type { Exercise, Session, SessionExerciseEntry, SessionSet, Workout } from './types'
+export type {
+  Exercise,
+  ExportedData,
+  Session,
+  SessionExerciseEntry,
+  SessionSet,
+  Workout,
+} from './types'
 export type { EntityTable } from './table'
 
 export interface StoreDeps {
@@ -289,6 +303,25 @@ export class Store {
 
   async deleteSession(id: string): Promise<void> {
     await this.sessions.delete(id)
+  }
+
+  async exportData(): Promise<ExportedData> {
+    const [exercises, workouts, sessions] = await Promise.all([
+      this.exercises.toArray(),
+      this.workouts.toArray(),
+      this.sessions.toArray(),
+    ])
+    return { version: 1, exercises, workouts, sessions }
+  }
+
+  /** Replaces all local data with the given export — this is a full restore, not a merge. */
+  async importData(data: ExportedData): Promise<void> {
+    await Promise.all([this.exercises.clear(), this.workouts.clear(), this.sessions.clear()])
+    await Promise.all([
+      data.exercises.length > 0 ? this.exercises.bulkAdd(data.exercises) : undefined,
+      data.workouts.length > 0 ? this.workouts.bulkAdd(data.workouts) : undefined,
+      data.sessions.length > 0 ? this.sessions.bulkAdd(data.sessions) : undefined,
+    ])
   }
 
   private async requireSession(id: string): Promise<Session> {

@@ -30,6 +30,9 @@ function createInMemoryTable<T extends { id: string }>(): EntityTable<T> {
       for (const entity of entities) rows.set(entity.id, entity)
       return entities.at(-1)?.id
     },
+    async clear() {
+      rows.clear()
+    },
   }
 }
 
@@ -529,6 +532,60 @@ describe('Store', () => {
       await store.deleteSession(session.id)
 
       expect(await store.listSessions()).toEqual([])
+    })
+  })
+
+  describe('exportData / importData', () => {
+    it('round-trips all Exercises, Workouts, and Sessions through export then import', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const ohp = await store.createExercise('Overhead Press')
+      const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
+      await store.updateSessionNotes(session.id, 'Felt good')
+
+      const exported = await store.exportData()
+
+      const freshExercises = createInMemoryTable<Exercise>()
+      const freshWorkouts = createInMemoryTable<Workout>()
+      const freshSessions = createInMemoryTable<Session>()
+      const freshStore = new Store({
+        exercises: freshExercises,
+        workouts: freshWorkouts,
+        sessions: freshSessions,
+      })
+      await freshStore.importData(exported)
+
+      expect(await freshStore.listExercises()).toEqual(await store.listExercises())
+      expect(await freshStore.listWorkouts()).toEqual(await store.listWorkouts())
+      expect(await freshStore.listSessions()).toEqual(await store.listSessions())
+    })
+
+    it('replaces any existing data on import rather than merging with it', async () => {
+      await store.createExercise('Old Exercise')
+      const exported = await store.exportData()
+
+      const otherExercises = createInMemoryTable<Exercise>()
+      const otherWorkouts = createInMemoryTable<Workout>()
+      const otherSessions = createInMemoryTable<Session>()
+      const otherStore = new Store({
+        exercises: otherExercises,
+        workouts: otherWorkouts,
+        sessions: otherSessions,
+      })
+      await otherStore.createExercise('Should be replaced')
+
+      await otherStore.importData(exported)
+
+      const all = await otherStore.listExercises()
+      expect(all.map((e) => e.name)).toEqual(['Old Exercise'])
+    })
+
+    it('produces an empty export when there is no data', async () => {
+      const exported = await store.exportData()
+      expect(exported.exercises).toEqual([])
+      expect(exported.workouts).toEqual([])
+      expect(exported.sessions).toEqual([])
     })
   })
 
