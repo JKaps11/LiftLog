@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { Store, type Exercise, type Workout } from './index'
+import { Store, resolveExerciseDisplayName, type Exercise, type Session, type Workout } from './index'
 import type { EntityTable } from './table'
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
 
@@ -36,12 +36,14 @@ function createInMemoryTable<T extends { id: string }>(): EntityTable<T> {
 describe('Store', () => {
   let exercises: EntityTable<Exercise>
   let workouts: EntityTable<Workout>
+  let sessions: EntityTable<Session>
   let store: Store
 
   beforeEach(() => {
     exercises = createInMemoryTable<Exercise>()
     workouts = createInMemoryTable<Workout>()
-    store = new Store({ exercises, workouts })
+    sessions = createInMemoryTable<Session>()
+    store = new Store({ exercises, workouts, sessions })
   })
 
   it('is constructible in isolation, with no DOM or browser APIs required', () => {
@@ -78,7 +80,7 @@ describe('Store', () => {
     it('does not re-seed on a later app launch (a fresh Store over the same table)', async () => {
       await store.seedExercisesIfEmpty()
 
-      const relaunchedStore = new Store({ exercises, workouts })
+      const relaunchedStore = new Store({ exercises, workouts, sessions })
       await relaunchedStore.seedExercisesIfEmpty()
 
       const all = await relaunchedStore.listExercises()
@@ -246,6 +248,200 @@ describe('Store', () => {
 
     it('rejects reordering a nonexistent Workout', async () => {
       await expect(store.reorderWorkoutExercises('missing-id', [])).rejects.toThrow()
+    })
+  })
+
+  describe('startSession', () => {
+    it('snapshots the Workout name and Exercise list, denormalizing each Exercise name, with empty sets when there is no prior Session', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const ohp = await store.createExercise('Overhead Press')
+      const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
+
+      const session = await store.startSession(workout.id)
+
+      expect(session.workoutId).toBe(workout.id)
+      expect(session.workoutNameSnapshot).toBe('Push Day')
+      expect(session.exercises).toEqual([
+        { exerciseId: bench.id, exerciseNameAtLogTime: 'Bench Press', sets: [] },
+        { exerciseId: ohp.id, exerciseNameAtLogTime: 'Overhead Press', sets: [] },
+      ])
+      expect(session.startTime).toBeTruthy()
+      expect(session.endTime).toBeNull()
+      expect(session.notes).toBe('')
+    })
+
+    it('pre-fills each Exercise with sets from the most recent prior Session for the same Workout', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+
+      const first = await store.startSession(workout.id)
+      await store.logSet(first.id, bench.id, { weight: 135, reps: 8 })
+      await store.logSet(first.id, bench.id, { weight: 155, reps: 5 })
+
+      const second = await store.startSession(workout.id)
+
+      expect(second.exercises).toEqual([
+        {
+          exerciseId: bench.id,
+          exerciseNameAtLogTime: 'Bench Press',
+          sets: [
+            { weight: 135, reps: 8 },
+            { weight: 155, reps: 5 },
+          ],
+        },
+      ])
+    })
+
+    it('rejects starting a Session for a nonexistent Workout', async () => {
+      await expect(store.startSession('missing-id')).rejects.toThrow()
+    })
+  })
+
+  describe('logSet', () => {
+    it('appends a new Set to the given Exercise within the Session', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
+
+      expect(updated.exercises[0].sets).toEqual([{ weight: 135, reps: 8 }])
+    })
+
+    it('rejects logging a Set for a nonexistent Session', async () => {
+      await expect(
+        store.logSet('missing-id', 'exercise-id', { weight: 100, reps: 5 })
+      ).rejects.toThrow()
+    })
+
+    it('rejects logging a Set for an Exercise not part of the Session', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      await expect(
+        store.logSet(session.id, 'missing-exercise-id', { weight: 100, reps: 5 })
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('updateSet', () => {
+    it('updates the weight/reps of an existing Set', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
+
+      const updated = await store.updateSet(logged.id, bench.id, 0, { weight: 145, reps: 6 })
+
+      expect(updated.exercises[0].sets).toEqual([{ weight: 145, reps: 6 }])
+    })
+
+    it('rejects updating a Set at an out-of-range index', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await expect(
+        store.updateSet(session.id, bench.id, 0, { weight: 145, reps: 6 })
+      ).rejects.toThrow()
+    })
+
+    it('rejects updating a Set for a nonexistent Session', async () => {
+      await expect(
+        store.updateSet('missing-id', 'exercise-id', 0, { weight: 100, reps: 5 })
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('endSession', () => {
+    it('records an end time', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.endTime).toBeTruthy()
+    })
+
+    it('rejects ending a nonexistent Session', async () => {
+      await expect(store.endSession('missing-id')).rejects.toThrow()
+    })
+  })
+
+  describe('updateSessionNotes', () => {
+    it('sets the free-text notes on a Session', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.updateSessionNotes(session.id, 'Felt strong today')
+
+      expect(updated.notes).toBe('Felt strong today')
+    })
+
+    it('rejects updating notes for a nonexistent Session', async () => {
+      await expect(store.updateSessionNotes('missing-id', 'notes')).rejects.toThrow()
+    })
+  })
+
+  describe('getLastSessionForWorkout', () => {
+    it('returns undefined when no prior Session exists for the Workout', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      expect(await store.getLastSessionForWorkout(workout.id)).toBeUndefined()
+    })
+
+    it('returns the most recent prior Session, ignoring Sessions for other Workouts', async () => {
+      const pushDay = await store.createWorkout('Push Day', [])
+      const pullDay = await store.createWorkout('Pull Day', [])
+
+      const first = await store.startSession(pushDay.id)
+      await store.startSession(pullDay.id)
+      const second = await store.startSession(pushDay.id)
+
+      const last = await store.getLastSessionForWorkout(pushDay.id)
+
+      expect(last?.id).toBe(second.id)
+      expect(last?.id).not.toBe(first.id)
+    })
+  })
+
+  describe('ADR-0001: Sessions snapshot their Workout, independent of later edits', () => {
+    it('does not change a past Session when the Workout is renamed or its Exercises edited afterward', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const ohp = await store.createExercise('Overhead Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await store.updateWorkout(workout.id, { name: 'Push Day (Heavy)', exerciseIds: [ohp.id] })
+
+      const reloadedSession = await store.getLastSessionForWorkout(workout.id)
+      expect(reloadedSession?.id).toBe(session.id)
+      expect(reloadedSession?.workoutNameSnapshot).toBe('Push Day')
+      expect(reloadedSession?.exercises.map((e) => e.exerciseId)).toEqual([bench.id])
+    })
+  })
+
+  describe('resolveExerciseDisplayName', () => {
+    it('prefers the live Exercise name when the Exercise still exists (renames follow through to past Sessions)', async () => {
+      const bench = await store.createExercise('Bemch Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      const renamed = await store.renameExercise(bench.id, 'Bench Press')
+
+      const allExercises = await store.listExercises()
+      expect(resolveExerciseDisplayName(allExercises, session.exercises[0])).toBe('Bench Press')
+      expect(renamed.name).toBe('Bench Press')
+    })
+
+    it('falls back to the denormalized name captured at log time when the Exercise has been deleted', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await store.deleteExercise(bench.id)
+
+      const allExercises = await store.listExercises()
+      expect(resolveExerciseDisplayName(allExercises, session.exercises[0])).toBe('Bench Press')
     })
   })
 })
