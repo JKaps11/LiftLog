@@ -16,8 +16,8 @@ export default defineConfig({
         name: 'LiftLog',
         short_name: 'LiftLog',
         description: 'Minimal personal workout creation and tracking',
-        theme_color: '#18191c',
-        background_color: '#18191c',
+        theme_color: '#000000',
+        background_color: '#000000',
         display: 'standalone',
         start_url: '/',
         icons: [
