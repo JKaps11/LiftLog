@@ -7,7 +7,7 @@ export class WorkoutLogsDB extends Dexie {
   sessions!: Table<Session, string>
 
   constructor() {
-    super('workout-logs')
+    super('liftlog')
     this.version(1).stores({
       exercises: 'id',
       workouts: 'id',

@@ -1,4 +1,4 @@
-# Workout Logs
+# LiftLog
 
 A minimal, single-user mobile PWA for defining workouts and logging performance of them over time.
 

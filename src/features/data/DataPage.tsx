@@ -75,7 +75,7 @@ export function DataPage() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `workout-logs-export-${new Date().toISOString().slice(0, 10)}.json`
+    link.download = `liftlog-export-${new Date().toISOString().slice(0, 10)}.json`
     link.click()
     URL.revokeObjectURL(url)
     setStatus('Exported.')
@@ -99,7 +99,7 @@ export function DataPage() {
     }
 
     if (!isExportedData(parsed)) {
-      setStatus('That file is not a Workout Logs export.')
+      setStatus('That file is not a LiftLog export.')
       return
     }
 

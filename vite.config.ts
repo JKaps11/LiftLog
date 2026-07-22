@@ -13,8 +13,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Workout Logs',
-        short_name: 'Workouts',
+        name: 'LiftLog',
+        short_name: 'LiftLog',
         description: 'Minimal personal workout creation and tracking',
         theme_color: '#18191c',
         background_color: '#18191c',
