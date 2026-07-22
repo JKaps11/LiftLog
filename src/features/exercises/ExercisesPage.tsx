@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { PageHeading } from '@/components/ui/page-heading'
 import { store } from '@/store/instance'
 import type { Exercise } from '@/store'
+import { filterExercisesByName } from '@/features/workouts/exerciseLookup'
 
 export function ExercisesPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
@@ -11,6 +12,9 @@ export function ExercisesPage() {
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [search, setSearch] = useState('')
+
+  const visibleExercises = filterExercisesByName(exercises, search)
 
   async function refresh() {
     setExercises(await store.listExercises())
@@ -64,11 +68,20 @@ export function ExercisesPage() {
         <Button type="submit">Add</Button>
       </form>
 
+      <Input
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search exercises"
+        aria-label="Search exercises"
+      />
+
       {isLoading ? (
         <p className="text-muted-foreground">Loading exercises…</p>
+      ) : visibleExercises.length === 0 ? (
+        <p className="text-muted-foreground">No exercises match "{search.trim()}".</p>
       ) : (
         <ul className="flex flex-col gap-1">
-          {exercises.map((exercise) => (
+          {visibleExercises.map((exercise) => (
             <li
               key={exercise.id}
               className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5"

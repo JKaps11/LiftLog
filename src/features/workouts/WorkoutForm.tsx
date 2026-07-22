@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { SectionLabel } from '@/components/ui/section-label'
 import type { Exercise, Workout } from '@/store'
-import { exerciseNameById } from './exerciseLookup'
+import { exerciseNameById, filterExercisesByName } from './exerciseLookup'
 
 interface WorkoutFormProps {
   allExercises: Exercise[]
@@ -17,8 +17,10 @@ interface WorkoutFormProps {
 export function WorkoutForm({ allExercises, workout, onSave, onCancel }: WorkoutFormProps) {
   const [name, setName] = useState(workout?.name ?? '')
   const [exerciseIds, setExerciseIds] = useState<string[]>(workout?.exerciseIds ?? [])
+  const [exerciseSearch, setExerciseSearch] = useState('')
 
   const selectedIds = new Set(exerciseIds)
+  const visibleExercises = filterExercisesByName(allExercises, exerciseSearch)
 
   function toggleExercise(id: string, checked: boolean) {
     setExerciseIds((current) =>
@@ -104,20 +106,33 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
 
       <div>
         <SectionLabel>Add exercises</SectionLabel>
-        <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-          {allExercises.map((exercise) => (
-            <li key={exercise.id} className="flex items-center gap-2 px-2.5 py-1">
-              <Checkbox
-                id={`exercise-${exercise.id}`}
-                checked={selectedIds.has(exercise.id)}
-                onCheckedChange={(checked) => toggleExercise(exercise.id, checked === true)}
-              />
-              <label htmlFor={`exercise-${exercise.id}`} className="flex-1 text-sm">
-                {exercise.name}
-              </label>
-            </li>
-          ))}
-        </ul>
+        <Input
+          value={exerciseSearch}
+          onChange={(event) => setExerciseSearch(event.target.value)}
+          placeholder="Search exercises"
+          aria-label="Search exercises"
+          className="mb-2"
+        />
+        {visibleExercises.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No exercises match "{exerciseSearch.trim()}".
+          </p>
+        ) : (
+          <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+            {visibleExercises.map((exercise) => (
+              <li key={exercise.id} className="flex items-center gap-2 px-2.5 py-1">
+                <Checkbox
+                  id={`exercise-${exercise.id}`}
+                  checked={selectedIds.has(exercise.id)}
+                  onCheckedChange={(checked) => toggleExercise(exercise.id, checked === true)}
+                />
+                <label htmlFor={`exercise-${exercise.id}`} className="flex-1 text-sm">
+                  {exercise.name}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="flex gap-2">
