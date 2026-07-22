@@ -1,9 +1,10 @@
-import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { store } from '@/store/instance'
 import type { Exercise, Session } from '@/store'
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from './dateTime'
 import { SessionExerciseCard } from './SessionExerciseCard'
+import { useSessionEditing } from './useSessionEditing'
 
 interface SessionDetailProps {
   session: Session
@@ -14,38 +15,8 @@ interface SessionDetailProps {
 }
 
 export function SessionDetail({ session, exercises, onChange, onDelete, onBack }: SessionDetailProps) {
-  const [notes, setNotes] = useState(session.notes)
-
-  async function handleAddSet(exerciseId: string) {
-    const updated = await store.logSet(session.id, exerciseId, { weight: 0, reps: 0 })
-    onChange(updated)
-  }
-
-  async function handleSetChange(
-    exerciseId: string,
-    setIndex: number,
-    field: 'weight' | 'reps',
-    value: number
-  ) {
-    const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
-    const current = entry?.sets[setIndex]
-    if (!current) return
-    const updated = await store.updateSet(session.id, exerciseId, setIndex, {
-      ...current,
-      [field]: value,
-    })
-    onChange(updated)
-  }
-
-  async function handleDeleteSet(exerciseId: string, setIndex: number) {
-    const updated = await store.deleteSet(session.id, exerciseId, setIndex)
-    onChange(updated)
-  }
-
-  async function handleNotesBlur() {
-    const updated = await store.updateSessionNotes(session.id, notes)
-    onChange(updated)
-  }
+  const { notes, setNotes, handleAddSet, handleSetChange, handleDeleteSet, handleNotesBlur } =
+    useSessionEditing(session, onChange)
 
   async function handleStartTimeChange(value: string) {
     if (!value) return
@@ -68,6 +39,13 @@ export function SessionDetail({ session, exercises, onChange, onDelete, onBack }
     onDelete()
   }
 
+  const dateLabel = new Date(session.date).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
       <div className="flex items-center justify-between">
@@ -79,25 +57,26 @@ export function SessionDetail({ session, exercises, onChange, onDelete, onBack }
         </Button>
       </div>
 
-      <h1 className="text-2xl font-semibold">{session.workoutNameSnapshot}</h1>
+      <div>
+        <h1 className="text-2xl font-semibold">{session.workoutNameSnapshot}</h1>
+        <p className="text-sm text-muted-foreground">{dateLabel}</p>
+      </div>
 
       <div className="flex flex-col gap-2">
         <label className="flex flex-col gap-1 text-sm text-muted-foreground">
           Start time
-          <input
+          <Input
             type="datetime-local"
             value={toDatetimeLocalValue(session.startTime)}
             onChange={(event) => handleStartTimeChange(event.target.value)}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-muted-foreground">
           End time
-          <input
+          <Input
             type="datetime-local"
             value={session.endTime ? toDatetimeLocalValue(session.endTime) : ''}
             onChange={(event) => handleEndTimeChange(event.target.value)}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
         </label>
       </div>

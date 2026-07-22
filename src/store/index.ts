@@ -18,6 +18,10 @@ export function isSamePermutation(a: string[], b: string[]): boolean {
   return sortedA.every((value, i) => value === sortedB[i])
 }
 
+function sortByStartTimeDescending(sessions: Session[]): Session[] {
+  return [...sessions].sort((a, b) => b.startTime.localeCompare(a.startTime))
+}
+
 /**
  * Prefers a live lookup by exerciseId (so renames follow through to past
  * Sessions); falls back to the name denormalized at log time when the
@@ -240,10 +244,7 @@ export class Store {
   async getLastSessionForWorkout(workoutId: string): Promise<Session | undefined> {
     const all = await this.sessions.toArray()
     const forWorkout = all.filter((session) => session.workoutId === workoutId)
-    if (forWorkout.length === 0) return undefined
-    return forWorkout.reduce((latest, session) =>
-      session.startTime >= latest.startTime ? session : latest
-    )
+    return sortByStartTimeDescending(forWorkout)[0]
   }
 
   async deleteSet(sessionId: string, exerciseId: string, setIndex: number): Promise<Session> {
@@ -269,10 +270,13 @@ export class Store {
     updates: { startTime?: string; endTime?: string }
   ): Promise<Session> {
     const session = await this.requireSession(sessionId)
+    const startTime = updates.startTime ?? session.startTime
     const updated: Session = {
       ...session,
-      startTime: updates.startTime ?? session.startTime,
+      startTime,
       endTime: updates.endTime ?? session.endTime,
+      // date tracks startTime's day — keep them in sync when startTime moves.
+      date: startTime,
     }
     await this.sessions.put(updated)
     return updated
@@ -280,10 +284,7 @@ export class Store {
 
   async listSessions(): Promise<Session[]> {
     const all = await this.sessions.toArray()
-    // Ties on startTime break toward insertion order (later logged first) by
-    // reversing before a stable sort, rather than toward array/table order,
-    // which storage doesn't guarantee.
-    return [...all].reverse().sort((a, b) => b.startTime.localeCompare(a.startTime))
+    return sortByStartTimeDescending(all)
   }
 
   async deleteSession(id: string): Promise<void> {

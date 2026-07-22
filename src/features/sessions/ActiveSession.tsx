@@ -1,8 +1,7 @@
-import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { store } from '@/store/instance'
 import type { Exercise, Session } from '@/store'
 import { SessionExerciseCard } from './SessionExerciseCard'
+import { useSessionEditing } from './useSessionEditing'
 
 interface ActiveSessionProps {
   session: Session
@@ -12,38 +11,8 @@ interface ActiveSessionProps {
 }
 
 export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSessionProps) {
-  const [notes, setNotes] = useState(session.notes)
-
-  async function handleAddSet(exerciseId: string) {
-    const updated = await store.logSet(session.id, exerciseId, { weight: 0, reps: 0 })
-    onChange(updated)
-  }
-
-  async function handleSetChange(
-    exerciseId: string,
-    setIndex: number,
-    field: 'weight' | 'reps',
-    value: number
-  ) {
-    const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
-    const current = entry?.sets[setIndex]
-    if (!current) return
-    const updated = await store.updateSet(session.id, exerciseId, setIndex, {
-      ...current,
-      [field]: value,
-    })
-    onChange(updated)
-  }
-
-  async function handleDeleteSet(exerciseId: string, setIndex: number) {
-    const updated = await store.deleteSet(session.id, exerciseId, setIndex)
-    onChange(updated)
-  }
-
-  async function handleNotesBlur() {
-    const updated = await store.updateSessionNotes(session.id, notes)
-    onChange(updated)
-  }
+  const { notes, setNotes, handleAddSet, handleSetChange, handleDeleteSet, handleNotesBlur } =
+    useSessionEditing(session, onChange)
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">

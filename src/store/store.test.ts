@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Store, resolveExerciseDisplayName, type Exercise, type Session, type Workout } from './index'
 import type { EntityTable } from './table'
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
@@ -390,17 +390,24 @@ describe('Store', () => {
     })
 
     it('returns the most recent prior Session, ignoring Sessions for other Workouts', async () => {
-      const pushDay = await store.createWorkout('Push Day', [])
-      const pullDay = await store.createWorkout('Pull Day', [])
+      vi.useFakeTimers()
+      try {
+        const pushDay = await store.createWorkout('Push Day', [])
+        const pullDay = await store.createWorkout('Pull Day', [])
 
-      const first = await store.startSession(pushDay.id)
-      await store.startSession(pullDay.id)
-      const second = await store.startSession(pushDay.id)
+        const first = await store.startSession(pushDay.id)
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        await store.startSession(pullDay.id)
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const second = await store.startSession(pushDay.id)
 
-      const last = await store.getLastSessionForWorkout(pushDay.id)
+        const last = await store.getLastSessionForWorkout(pushDay.id)
 
-      expect(last?.id).toBe(second.id)
-      expect(last?.id).not.toBe(first.id)
+        expect(last?.id).toBe(second.id)
+        expect(last?.id).not.toBe(first.id)
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 
@@ -478,18 +485,35 @@ describe('Store', () => {
         store.updateSessionTimes('missing-id', { startTime: '2026-01-01T10:00:00.000Z' })
       ).rejects.toThrow()
     })
+
+    it('keeps date in sync with a changed startTime', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.updateSessionTimes(session.id, {
+        startTime: '2026-01-01T10:00:00.000Z',
+      })
+
+      expect(updated.date).toBe('2026-01-01T10:00:00.000Z')
+    })
   })
 
   describe('listSessions', () => {
     it('lists all Sessions, most recently started first', async () => {
-      const pushDay = await store.createWorkout('Push Day', [])
-      const pullDay = await store.createWorkout('Pull Day', [])
-      const first = await store.startSession(pushDay.id)
-      const second = await store.startSession(pullDay.id)
+      vi.useFakeTimers()
+      try {
+        const pushDay = await store.createWorkout('Push Day', [])
+        const pullDay = await store.createWorkout('Pull Day', [])
+        const first = await store.startSession(pushDay.id)
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const second = await store.startSession(pullDay.id)
 
-      const all = await store.listSessions()
+        const all = await store.listSessions()
 
-      expect(all.map((s) => s.id)).toEqual([second.id, first.id])
+        expect(all.map((s) => s.id)).toEqual([second.id, first.id])
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
     it('returns an empty list when there are no Sessions', async () => {
