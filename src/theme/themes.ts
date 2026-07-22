@@ -2,45 +2,46 @@ import type { Theme } from './types'
 
 /**
  * The app's default palette (see src/index.css's .dark block, which this
- * mirrors) — an iron/steel graphite background with a single warm amber
- * accent. Additional themes can be appended here in the same shape.
+ * mirrors, so there's no flash of the old default before JS applies a theme
+ * override) — true-black background with a red accent. Additional themes
+ * can be appended here in the same shape.
  */
 const LIFTLOG: Theme = {
   id: 'liftlog',
   name: 'LiftLog',
   colors: {
-    background: 'oklch(0.16 0.004 260)',
-    foreground: 'oklch(0.94 0.004 260)',
-    card: 'oklch(0.205 0.005 260)',
-    cardForeground: 'oklch(0.94 0.004 260)',
-    popover: 'oklch(0.205 0.005 260)',
-    popoverForeground: 'oklch(0.94 0.004 260)',
-    primary: 'oklch(0.76 0.14 70)',
-    primaryForeground: 'oklch(0.18 0.03 60)',
-    secondary: 'oklch(0.255 0.006 260)',
-    secondaryForeground: 'oklch(0.94 0.004 260)',
-    muted: 'oklch(0.23 0.005 260)',
-    mutedForeground: 'oklch(0.62 0.012 260)',
-    accent: 'oklch(0.255 0.006 260)',
-    accentForeground: 'oklch(0.94 0.004 260)',
-    destructive: 'oklch(0.62 0.16 25)',
-    border: 'oklch(1 0 0 / 9%)',
-    input: 'oklch(1 0 0 / 13%)',
-    ring: 'oklch(0.76 0.14 70 / 55%)',
-    chart1: 'oklch(0.76 0.14 70)',
-    chart2: 'oklch(0.62 0.012 260)',
-    chart3: 'oklch(0.439 0 0)',
-    chart4: 'oklch(0.371 0 0)',
-    chart5: 'oklch(0.269 0 0)',
-    sidebar: 'oklch(0.205 0.005 260)',
-    sidebarForeground: 'oklch(0.94 0.004 260)',
-    sidebarPrimary: 'oklch(0.76 0.14 70)',
-    sidebarPrimaryForeground: 'oklch(0.18 0.03 60)',
-    sidebarAccent: 'oklch(0.255 0.006 260)',
-    sidebarAccentForeground: 'oklch(0.94 0.004 260)',
-    sidebarBorder: 'oklch(1 0 0 / 9%)',
-    sidebarRing: 'oklch(0.76 0.14 70 / 55%)',
-    radius: '0.375rem',
+    background: 'oklch(0 0 0)',
+    foreground: 'oklch(0.9328 0.0025 228.7857)',
+    card: 'oklch(0.2097 0.0080 274.5332)',
+    cardForeground: 'oklch(0.8853 0 0)',
+    popover: 'oklch(0 0 0)',
+    popoverForeground: 'oklch(0.9328 0.0025 228.7857)',
+    primary: 'oklch(0.5914 0.2411 29.0849)',
+    primaryForeground: 'oklch(1.0000 0 0)',
+    secondary: 'oklch(0.9622 0.0035 219.5331)',
+    secondaryForeground: 'oklch(0.1884 0.0128 248.5103)',
+    muted: 'oklch(0.2090 0 0)',
+    mutedForeground: 'oklch(0.5637 0.0078 247.9662)',
+    accent: 'oklch(0.1928 0.0331 242.5459)',
+    accentForeground: 'oklch(0.6108 0.2377 28.1203)',
+    destructive: 'oklch(0.6188 0.2376 25.7658)',
+    border: 'oklch(0.2674 0.0047 248.0045)',
+    input: 'oklch(0.1149 0 0)',
+    ring: 'oklch(0.6117 0.2395 28.2376)',
+    chart1: 'oklch(0.6723 0.1606 244.9955)',
+    chart2: 'oklch(0.6907 0.1554 160.3454)',
+    chart3: 'oklch(0.8214 0.1600 82.5337)',
+    chart4: 'oklch(0.7064 0.1822 151.7125)',
+    chart5: 'oklch(0.5919 0.2186 10.5826)',
+    sidebar: 'oklch(0 0 0)',
+    sidebarForeground: 'oklch(0.9328 0.0025 228.7857)',
+    sidebarPrimary: 'oklch(0.5914 0.2411 29.0849)',
+    sidebarPrimaryForeground: 'oklch(1.0000 0 0)',
+    sidebarAccent: 'oklch(0.1772 0.0507 23.8674)',
+    sidebarAccentForeground: 'oklch(0.6108 0.2377 28.1203)',
+    sidebarBorder: 'oklch(0.2674 0.0047 248.0045)',
+    sidebarRing: 'oklch(0.6117 0.2395 28.2376)',
+    radius: '0.7rem',
   },
 }
 
@@ -53,7 +54,7 @@ const LIFTLOG: Theme = {
  */
 const LIME: Theme = {
   id: 'lime',
-  name: 'Lime',
+  name: 'Lime Green',
   colors: {
     background: 'oklch(0.1288 0.0406 264.6952)',
     foreground: 'oklch(0.9842 0.0034 247.8575)',
@@ -96,9 +97,9 @@ const LIME: Theme = {
  * anyway, so those are derived from the nearest matching color rather than
  * pasted, the same way tweakcn falls back when a theme leaves them unset.
  */
-const VIOLET: Theme = {
-  id: 'violet',
-  name: 'Violet',
+const CATPPUCCIN_MOCHA: Theme = {
+  id: 'catppuccin-mocha',
+  name: 'Catppuccin Mocha',
   colors: {
     background: 'oklch(0.244 0.03 283.913)',
     foreground: 'oklch(0.878 0.043 272.094)',
@@ -135,4 +136,51 @@ const VIOLET: Theme = {
   },
 }
 
-export const THEMES: Theme[] = [LIFTLOG, LIME, VIOLET]
+/**
+ * A genuine light theme (near-white background) — added despite the app
+ * otherwise being dark-only, at explicit request. Selecting it renders an
+ * actual light screen; there's still no OS-driven or toggled light/dark
+ * mode, just this as one option among otherwise-dark themes in the picker.
+ * :root and .dark were identical in the export and it didn't customize the
+ * sidebar tokens, so those are derived the same way as Lime/Catppuccin.
+ */
+const NIGHT_OWL_LIGHT: Theme = {
+  id: 'night-owl-light',
+  name: 'Night Owl Light',
+  colors: {
+    background: 'oklch(0.985 0 180)',
+    foreground: 'oklch(0.38 0.035 286.889)',
+    card: 'oklch(0.97 0 180)',
+    cardForeground: 'oklch(0.336 0.03 286.957)',
+    popover: 'oklch(0.962 0 180)',
+    popoverForeground: 'oklch(0.29 0.025 287.051)',
+    primary: 'oklch(0.38 0.035 286.889)',
+    primaryForeground: 'oklch(0.906 0.011 288.49)',
+    secondary: 'oklch(0.799 0.007 288.543)',
+    secondaryForeground: 'oklch(0.265 0.006 288.309)',
+    muted: 'oklch(0.919 0.007 17.278)',
+    mutedForeground: 'oklch(0.404 0.025 18.259)',
+    accent: 'oklch(0.869 0 165.964)',
+    accentForeground: 'oklch(0.351 0 167.471)',
+    destructive: 'oklch(0.325 0.118 32.119)',
+    border: 'oklch(0.947 0 180)',
+    input: 'oklch(0.923 0 164.055)',
+    ring: 'oklch(0.38 0.035 286.889)',
+    chart1: 'oklch(0.38 0.035 286.889)',
+    chart2: 'oklch(0.799 0.007 288.543)',
+    chart3: 'oklch(0.869 0 165.964)',
+    chart4: 'oklch(0.824 0.006 288.569)',
+    chart5: 'oklch(0.374 0.043 286.42)',
+    sidebar: 'oklch(0.985 0 180)',
+    sidebarForeground: 'oklch(0.336 0.03 286.957)',
+    sidebarPrimary: 'oklch(0.38 0.035 286.889)',
+    sidebarPrimaryForeground: 'oklch(0.906 0.011 288.49)',
+    sidebarAccent: 'oklch(0.869 0 165.964)',
+    sidebarAccentForeground: 'oklch(0.351 0 167.471)',
+    sidebarBorder: 'oklch(0.947 0 180)',
+    sidebarRing: 'oklch(0.38 0.035 286.889)',
+    radius: '0.5rem',
+  },
+}
+
+export const THEMES: Theme[] = [LIFTLOG, LIME, CATPPUCCIN_MOCHA, NIGHT_OWL_LIGHT]

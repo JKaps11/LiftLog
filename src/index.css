@@ -78,7 +78,7 @@
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --radius: 0.375rem;
+    --radius: 0.7rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-primary: oklch(0.205 0 0);
@@ -90,39 +90,41 @@
 }
 
 .dark {
-    /* Ink/steel/ember — an iron-plate palette: near-black graphite surfaces
-       with a single warm amber accent, like a panel meter lit up in a dim gym. */
-    --background: oklch(0.16 0.004 260);
-    --foreground: oklch(0.94 0.004 260);
-    --card: oklch(0.205 0.005 260);
-    --card-foreground: oklch(0.94 0.004 260);
-    --popover: oklch(0.205 0.005 260);
-    --popover-foreground: oklch(0.94 0.004 260);
-    --primary: oklch(0.76 0.14 70);
-    --primary-foreground: oklch(0.18 0.03 60);
-    --secondary: oklch(0.255 0.006 260);
-    --secondary-foreground: oklch(0.94 0.004 260);
-    --muted: oklch(0.23 0.005 260);
-    --muted-foreground: oklch(0.62 0.012 260);
-    --accent: oklch(0.255 0.006 260);
-    --accent-foreground: oklch(0.94 0.004 260);
-    --destructive: oklch(0.62 0.16 25);
-    --border: oklch(1 0 0 / 9%);
-    --input: oklch(1 0 0 / 13%);
-    --ring: oklch(0.76 0.14 70 / 55%);
-    --chart-1: oklch(0.76 0.14 70);
-    --chart-2: oklch(0.62 0.012 260);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0.005 260);
-    --sidebar-foreground: oklch(0.94 0.004 260);
-    --sidebar-primary: oklch(0.76 0.14 70);
-    --sidebar-primary-foreground: oklch(0.18 0.03 60);
-    --sidebar-accent: oklch(0.255 0.006 260);
-    --sidebar-accent-foreground: oklch(0.94 0.004 260);
-    --sidebar-border: oklch(1 0 0 / 9%);
-    --sidebar-ring: oklch(0.76 0.14 70 / 55%);
+    /* True-black background with a red accent — the app's default theme.
+       Kept in sync with the LIFTLOG entry in src/theme/themes.ts so there's
+       no flash of a different palette before the theme picker's persisted
+       choice applies on mount. */
+    --background: oklch(0 0 0);
+    --foreground: oklch(0.9328 0.0025 228.7857);
+    --card: oklch(0.2097 0.0080 274.5332);
+    --card-foreground: oklch(0.8853 0 0);
+    --popover: oklch(0 0 0);
+    --popover-foreground: oklch(0.9328 0.0025 228.7857);
+    --primary: oklch(0.5914 0.2411 29.0849);
+    --primary-foreground: oklch(1.0000 0 0);
+    --secondary: oklch(0.9622 0.0035 219.5331);
+    --secondary-foreground: oklch(0.1884 0.0128 248.5103);
+    --muted: oklch(0.2090 0 0);
+    --muted-foreground: oklch(0.5637 0.0078 247.9662);
+    --accent: oklch(0.1928 0.0331 242.5459);
+    --accent-foreground: oklch(0.6108 0.2377 28.1203);
+    --destructive: oklch(0.6188 0.2376 25.7658);
+    --border: oklch(0.2674 0.0047 248.0045);
+    --input: oklch(0.1149 0 0);
+    --ring: oklch(0.6117 0.2395 28.2376);
+    --chart-1: oklch(0.6723 0.1606 244.9955);
+    --chart-2: oklch(0.6907 0.1554 160.3454);
+    --chart-3: oklch(0.8214 0.1600 82.5337);
+    --chart-4: oklch(0.7064 0.1822 151.7125);
+    --chart-5: oklch(0.5919 0.2186 10.5826);
+    --sidebar: oklch(0 0 0);
+    --sidebar-foreground: oklch(0.9328 0.0025 228.7857);
+    --sidebar-primary: oklch(0.5914 0.2411 29.0849);
+    --sidebar-primary-foreground: oklch(1.0000 0 0);
+    --sidebar-accent: oklch(0.1772 0.0507 23.8674);
+    --sidebar-accent-foreground: oklch(0.6108 0.2377 28.1203);
+    --sidebar-border: oklch(0.2674 0.0047 248.0045);
+    --sidebar-ring: oklch(0.6117 0.2395 28.2376);
 }
 
 @layer base {
