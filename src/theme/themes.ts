@@ -90,4 +90,49 @@ const LIME: Theme = {
   },
 }
 
-export const THEMES: Theme[] = [LIFTLOG, LIME]
+/**
+ * Another tweakcn export — this one didn't customize the sidebar tokens
+ * (:root and .dark were identical), and this app has no sidebar component
+ * anyway, so those are derived from the nearest matching color rather than
+ * pasted, the same way tweakcn falls back when a theme leaves them unset.
+ */
+const VIOLET: Theme = {
+  id: 'violet',
+  name: 'Violet',
+  colors: {
+    background: 'oklch(0.244 0.03 283.913)',
+    foreground: 'oklch(0.878 0.043 272.094)',
+    card: 'oklch(0.225 0.027 284.034)',
+    cardForeground: 'oklch(0.929 0.024 272.369)',
+    popover: 'oklch(0.216 0.025 284.103)',
+    popoverForeground: 'oklch(0.98 0.007 272.584)',
+    primary: 'oklch(0.787 0.119 304.446)',
+    primaryForeground: 'oklch(0.277 0.139 295.596)',
+    secondary: 'oklch(0.334 0.068 303.657)',
+    secondaryForeground: 'oklch(0.864 0.033 305.939)',
+    muted: 'oklch(0.293 0.021 285.027)',
+    mutedForeground: 'oklch(0.733 0.027 285.71)',
+    accent: 'oklch(0.372 0.055 283.423)',
+    accentForeground: 'oklch(0.91 0.014 286.109)',
+    destructive: 'oklch(0.649 0.226 31.646)',
+    border: 'oklch(0.303 0.02 285.14)',
+    input: 'oklch(0.331 0.023 285.098)',
+    ring: 'oklch(0.787 0.119 304.446)',
+    chart1: 'oklch(0.787 0.119 304.446)',
+    chart2: 'oklch(0.334 0.068 303.657)',
+    chart3: 'oklch(0.372 0.055 283.423)',
+    chart4: 'oklch(0.359 0.075 303.591)',
+    chart5: 'oklch(0.784 0.123 304.365)',
+    sidebar: 'oklch(0.244 0.03 283.913)',
+    sidebarForeground: 'oklch(0.929 0.024 272.369)',
+    sidebarPrimary: 'oklch(0.787 0.119 304.446)',
+    sidebarPrimaryForeground: 'oklch(0.277 0.139 295.596)',
+    sidebarAccent: 'oklch(0.372 0.055 283.423)',
+    sidebarAccentForeground: 'oklch(0.91 0.014 286.109)',
+    sidebarBorder: 'oklch(0.303 0.02 285.14)',
+    sidebarRing: 'oklch(0.787 0.119 304.446)',
+    radius: '0.5rem',
+  },
+}
+
+export const THEMES: Theme[] = [LIFTLOG, LIME, VIOLET]
