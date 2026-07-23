@@ -371,6 +371,46 @@ describe('Store', () => {
     })
   })
 
+  describe('getActiveSession', () => {
+    it('returns undefined when there is no in-progress Session', async () => {
+      expect(await store.getActiveSession()).toBeUndefined()
+    })
+
+    it('returns the in-progress Session so a refresh can resume it', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      const active = await store.getActiveSession()
+
+      expect(active?.id).toBe(session.id)
+    })
+
+    it('ignores Sessions that have already ended', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+      await store.endSession(session.id)
+
+      expect(await store.getActiveSession()).toBeUndefined()
+    })
+
+    it('returns the most recently started Session when more than one is in progress', async () => {
+      vi.useFakeTimers()
+      try {
+        const pushDay = await store.createWorkout('Push Day', [])
+        const pullDay = await store.createWorkout('Pull Day', [])
+        await store.startSession(pushDay.id)
+        vi.advanceTimersByTime(1000)
+        const second = await store.startSession(pullDay.id)
+
+        const active = await store.getActiveSession()
+
+        expect(active?.id).toBe(second.id)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
   describe('updateSessionNotes', () => {
     it('sets the free-text notes on a Session', async () => {
       const workout = await store.createWorkout('Push Day', [])

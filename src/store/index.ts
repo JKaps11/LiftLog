@@ -301,6 +301,12 @@ export class Store {
     return sortByStartTimeDescending(all)
   }
 
+  /** The in-progress Session (if any) to resume into after a refresh or app relaunch. */
+  async getActiveSession(): Promise<Session | undefined> {
+    const all = await this.sessions.toArray()
+    return sortByStartTimeDescending(all.filter((session) => session.endTime === null))[0]
+  }
+
   async deleteSession(id: string): Promise<void> {
     await this.sessions.delete(id)
   }

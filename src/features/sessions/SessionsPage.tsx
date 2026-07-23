@@ -25,6 +25,10 @@ export function SessionsPage() {
   useEffect(() => {
     void (async () => {
       await refresh()
+      const activeSession = await store.getActiveSession()
+      if (activeSession) {
+        setView({ mode: 'active', session: activeSession })
+      }
       setIsLoading(false)
     })()
   }, [])
