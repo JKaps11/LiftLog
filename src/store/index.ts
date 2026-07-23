@@ -84,6 +84,7 @@ export class Store {
     const seeded: Exercise[] = EXERCISE_SEED.map((name) => ({
       id: crypto.randomUUID(),
       name,
+      isUnilateral: false,
     }))
     await this.exercises.bulkAdd(seeded)
   }
@@ -93,20 +94,27 @@ export class Store {
     return all.sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  async createExercise(name: string): Promise<Exercise> {
+  async createExercise(name: string, isUnilateral = false): Promise<Exercise> {
     const trimmed = name.trim()
     if (!trimmed) throw new Error('Exercise name cannot be empty')
-    const exercise: Exercise = { id: crypto.randomUUID(), name: trimmed }
+    const exercise: Exercise = { id: crypto.randomUUID(), name: trimmed, isUnilateral }
     await this.exercises.add(exercise)
     return exercise
   }
 
-  async renameExercise(id: string, name: string): Promise<Exercise> {
-    const trimmed = name.trim()
-    if (!trimmed) throw new Error('Exercise name cannot be empty')
+  async updateExercise(
+    id: string,
+    updates: { name?: string; isUnilateral?: boolean }
+  ): Promise<Exercise> {
     const existing = await this.exercises.get(id)
     if (!existing) throw new Error(`Exercise not found: ${id}`)
-    const updated: Exercise = { ...existing, name: trimmed }
+
+    const name = updates.name !== undefined ? updates.name.trim() : existing.name
+    if (!name) throw new Error('Exercise name cannot be empty')
+
+    const isUnilateral = updates.isUnilateral !== undefined ? updates.isUnilateral : existing.isUnilateral
+
+    const updated: Exercise = { ...existing, name, isUnilateral }
     await this.exercises.put(updated)
     return updated
   }
@@ -206,14 +214,26 @@ export class Store {
     return session
   }
 
+  /**
+   * Against a unilateral Exercise (checked live by exerciseId), appends a
+   * left+right pair of Sets in one call instead of a single Set.
+   */
   async logSet(sessionId: string, exerciseId: string, set: SessionSet): Promise<Session> {
     const session = await this.requireSession(sessionId)
     if (!session.exercises.some((entry) => entry.exerciseId === exerciseId)) {
       throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
     }
 
+    const exercise = await this.exercises.get(exerciseId)
+    const newSets: SessionSet[] = exercise?.isUnilateral
+      ? [
+          { ...set, side: 'left' },
+          { ...set, side: 'right' },
+        ]
+      : [{ ...set }]
+
     const exercises = session.exercises.map((entry) =>
-      entry.exerciseId === exerciseId ? { ...entry, sets: [...entry.sets, { ...set }] } : entry
+      entry.exerciseId === exerciseId ? { ...entry, sets: [...entry.sets, ...newSets] } : entry
     )
     const updated: Session = { ...session, exercises }
     await this.sessions.put(updated)
@@ -263,6 +283,11 @@ export class Store {
     return sortByStartTimeDescending(forWorkout)[0]
   }
 
+  /**
+   * A Set with a `side` is one half of a left+right pair (see logSet) —
+   * pairs are always adjacent in the array, so deleting either half removes
+   * both. A plain Set (no `side`) is removed alone, as today.
+   */
   async deleteSet(sessionId: string, exerciseId: string, setIndex: number): Promise<Session> {
     const session = await this.requireSession(sessionId)
     const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
@@ -271,9 +296,17 @@ export class Store {
       throw new Error(`Set index out of range: ${setIndex}`)
     }
 
+    const target = entry.sets[setIndex]
+    const indicesToRemove =
+      target.side === 'left'
+        ? [setIndex, setIndex + 1]
+        : target.side === 'right'
+          ? [setIndex - 1, setIndex]
+          : [setIndex]
+
     const exercises = session.exercises.map((e) =>
       e.exerciseId === exerciseId
-        ? { ...e, sets: e.sets.filter((_, i) => i !== setIndex) }
+        ? { ...e, sets: e.sets.filter((_, i) => !indicesToRemove.includes(i)) }
         : e
     )
     const updated: Session = { ...session, exercises }

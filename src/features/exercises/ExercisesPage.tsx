@@ -44,7 +44,7 @@ export function ExercisesPage() {
   async function handleRename(event: FormEvent) {
     event.preventDefault()
     if (!editingId || !editingName.trim()) return
-    await store.renameExercise(editingId, editingName)
+    await store.updateExercise(editingId, { name: editingName })
     setEditingId(null)
     await refresh()
   }

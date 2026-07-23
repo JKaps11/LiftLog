@@ -117,11 +117,24 @@ describe('Store', () => {
     })
   })
 
-  describe('renameExercise', () => {
+  describe('createExercise (isUnilateral)', () => {
+    it('defaults isUnilateral to false when omitted', async () => {
+      const exercise = await store.createExercise('Bench Press')
+      expect(exercise.isUnilateral).toBe(false)
+    })
+
+    it('persists isUnilateral when passed', async () => {
+      const exercise = await store.createExercise('Single Arm Row', true)
+      expect(exercise.isUnilateral).toBe(true)
+      expect(await store.listExercises()).toEqual([exercise])
+    })
+  })
+
+  describe('updateExercise', () => {
     it('updates the name of an existing exercise', async () => {
       const exercise = await store.createExercise('Bemch Press')
 
-      const renamed = await store.renameExercise(exercise.id, 'Bench Press')
+      const renamed = await store.updateExercise(exercise.id, { name: 'Bench Press' })
 
       expect(renamed.id).toBe(exercise.id)
       expect(renamed.name).toBe('Bench Press')
@@ -129,12 +142,39 @@ describe('Store', () => {
     })
 
     it('rejects renaming a nonexistent exercise', async () => {
-      await expect(store.renameExercise('missing-id', 'New Name')).rejects.toThrow()
+      await expect(
+        store.updateExercise('missing-id', { name: 'New Name' })
+      ).rejects.toThrow()
     })
 
     it('rejects an empty name', async () => {
       const exercise = await store.createExercise('Bench Press')
-      await expect(store.renameExercise(exercise.id, '   ')).rejects.toThrow()
+      await expect(store.updateExercise(exercise.id, { name: '   ' })).rejects.toThrow()
+    })
+
+    it('toggles isUnilateral on an existing exercise, false to true', async () => {
+      const exercise = await store.createExercise('Single Arm Row')
+
+      const updated = await store.updateExercise(exercise.id, { isUnilateral: true })
+
+      expect(updated.isUnilateral).toBe(true)
+      expect(updated.name).toBe('Single Arm Row')
+    })
+
+    it('toggles isUnilateral on an existing exercise, true to false', async () => {
+      const exercise = await store.createExercise('Single Arm Row', true)
+
+      const updated = await store.updateExercise(exercise.id, { isUnilateral: false })
+
+      expect(updated.isUnilateral).toBe(false)
+    })
+
+    it('leaves fields unspecified in the update untouched', async () => {
+      const exercise = await store.createExercise('Single Arm Row', true)
+
+      const updated = await store.updateExercise(exercise.id, { name: 'Single-Arm Row' })
+
+      expect(updated.isUnilateral).toBe(true)
     })
   })
 
@@ -360,6 +400,30 @@ describe('Store', () => {
         store.logSet(session.id, 'missing-exercise-id', { weight: 100, reps: 5 })
       ).rejects.toThrow()
     })
+
+    it('appends a left+right pair for a unilateral Exercise', async () => {
+      const row = await store.createExercise('Single Arm Row', true)
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
+
+      expect(updated.exercises[0].sets).toEqual([
+        emptySet(),
+        { weight: 40, reps: 10, side: 'left' },
+        { weight: 40, reps: 10, side: 'right' },
+      ])
+    })
+
+    it('does not add a side for a non-unilateral Exercise', async () => {
+      const bench = await store.createExercise('Bench Press', false)
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
+
+      expect(updated.exercises[0].sets.at(-1)).toEqual({ weight: 135, reps: 8 })
+    })
   })
 
   describe('updateSet', () => {
@@ -535,6 +599,76 @@ describe('Store', () => {
     it('rejects deleting a Set for a nonexistent Session', async () => {
       await expect(store.deleteSet('missing-id', 'exercise-id', 0)).rejects.toThrow()
     })
+
+    it('deleting the left Set of a unilateral pair removes both', async () => {
+      const row = await store.createExercise('Single Arm Row', true)
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
+      // sets: [emptySet(), left, right] -> left is index 1
+      const updated = await store.deleteSet(logged.id, row.id, 1)
+
+      expect(updated.exercises[0].sets).toEqual([emptySet()])
+    })
+
+    it('deleting the right Set of a unilateral pair removes both', async () => {
+      const row = await store.createExercise('Single Arm Row', true)
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
+      // sets: [emptySet(), left, right] -> right is index 2
+      const updated = await store.deleteSet(logged.id, row.id, 2)
+
+      expect(updated.exercises[0].sets).toEqual([emptySet()])
+    })
+
+    it('deleting one pair leaves other Sets/pairs intact and in order', async () => {
+      const row = await store.createExercise('Single Arm Row', true)
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
+      const logged = await store.logSet(session.id, row.id, { weight: 45, reps: 8 })
+      // sets: [emptySet(), left1, right1, left2, right2] -> delete the second pair at index 3
+      const updated = await store.deleteSet(logged.id, row.id, 3)
+
+      expect(updated.exercises[0].sets).toEqual([
+        emptySet(),
+        { weight: 40, reps: 10, side: 'left' },
+        { weight: 40, reps: 10, side: 'right' },
+      ])
+    })
+  })
+
+  describe('unilateral Exercises do not retroactively reinterpret past Sets', () => {
+    it('leaves a Set logged before the Exercise was unilateral unmodified after the flag is toggled on', async () => {
+      const row = await store.createExercise('Single Arm Row', false)
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
+
+      await store.updateExercise(row.id, { isUnilateral: true })
+
+      const reloaded = await store.getLastSessionForWorkout(workout.id)
+      expect(reloaded?.id).toBe(logged.id)
+      expect(reloaded?.exercises[0].sets).toEqual([emptySet(), { weight: 40, reps: 10 }])
+    })
+
+    it('leaves paired Sets unmodified after the Exercise is later un-flagged as unilateral', async () => {
+      const row = await store.createExercise('Single Arm Row', true)
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
+
+      await store.updateExercise(row.id, { isUnilateral: false })
+
+      const reloaded = await store.getLastSessionForWorkout(workout.id)
+      expect(reloaded?.id).toBe(logged.id)
+      expect(reloaded?.exercises[0].sets).toEqual([
+        emptySet(),
+        { weight: 40, reps: 10, side: 'left' },
+        { weight: 40, reps: 10, side: 'right' },
+      ])
+    })
   })
 
   describe('updateSessionTimes', () => {
@@ -676,7 +810,7 @@ describe('Store', () => {
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
-      const renamed = await store.renameExercise(bench.id, 'Bench Press')
+      const renamed = await store.updateExercise(bench.id, { name: 'Bench Press' })
 
       const allExercises = await store.listExercises()
       expect(resolveExerciseDisplayName(allExercises, session.exercises[0])).toBe('Bench Press')

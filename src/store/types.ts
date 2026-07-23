@@ -1,6 +1,7 @@
 export interface Exercise {
   id: string
   name: string
+  isUnilateral: boolean
 }
 
 /** exerciseIds is an ordered list — order is significant and must be preserved. */
@@ -10,9 +11,11 @@ export interface Workout {
   exerciseIds: string[]
 }
 
+/** side is present only on Sets logged against a unilateral Exercise; absent on plain Sets. */
 export interface SessionSet {
   weight: number
   reps: number
+  side?: 'left' | 'right'
 }
 
 export function emptySet(): SessionSet {
