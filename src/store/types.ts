@@ -15,6 +15,10 @@ export interface SessionSet {
   reps: number
 }
 
+export function emptySet(): SessionSet {
+  return { weight: 0, reps: 0 }
+}
+
 /**
  * exerciseNameAtLogTime is a denormalized fallback for display only — used when
  * the referenced Exercise has since been deleted. Prefer a live lookup by

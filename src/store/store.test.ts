@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { Store, resolveExerciseDisplayName, type Exercise, type Session, type Workout } from './index'
+import {
+  Store,
+  resolveExerciseDisplayName,
+  emptySet,
+  type Exercise,
+  type Session,
+  type Workout,
+} from './index'
 import type { EntityTable } from './table'
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
 
@@ -255,7 +262,7 @@ describe('Store', () => {
   })
 
   describe('startSession', () => {
-    it('snapshots the Workout name and Exercise list, denormalizing each Exercise name, with empty sets when there is no prior Session', async () => {
+    it('snapshots the Workout name and Exercise list, denormalizing each Exercise name, with one empty set when there is no prior Session', async () => {
       const bench = await store.createExercise('Bench Press')
       const ohp = await store.createExercise('Overhead Press')
       const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
@@ -265,12 +272,36 @@ describe('Store', () => {
       expect(session.workoutId).toBe(workout.id)
       expect(session.workoutNameSnapshot).toBe('Push Day')
       expect(session.exercises).toEqual([
-        { exerciseId: bench.id, exerciseNameAtLogTime: 'Bench Press', sets: [] },
-        { exerciseId: ohp.id, exerciseNameAtLogTime: 'Overhead Press', sets: [] },
+        { exerciseId: bench.id, exerciseNameAtLogTime: 'Bench Press', sets: [emptySet()] },
+        { exerciseId: ohp.id, exerciseNameAtLogTime: 'Overhead Press', sets: [emptySet()] },
       ])
       expect(session.startTime).toBeTruthy()
       expect(session.endTime).toBeNull()
       expect(session.notes).toBe('')
+    })
+
+    it('pre-fills a new Exercise added to an already-logged Workout with one empty set', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const ohp = await store.createExercise('Overhead Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+
+      const first = await store.startSession(workout.id)
+      await store.logSet(first.id, bench.id, { weight: 135, reps: 8 })
+
+      await store.updateWorkout(workout.id, { exerciseIds: [bench.id, ohp.id] })
+      const second = await store.startSession(workout.id)
+
+      expect(second.exercises).toEqual([
+        {
+          exerciseId: bench.id,
+          exerciseNameAtLogTime: 'Bench Press',
+          sets: [
+            emptySet(),
+            { weight: 135, reps: 8 },
+          ],
+        },
+        { exerciseId: ohp.id, exerciseNameAtLogTime: 'Overhead Press', sets: [emptySet()] },
+      ])
     })
 
     it('pre-fills each Exercise with sets from the most recent prior Session for the same Workout', async () => {
@@ -288,6 +319,7 @@ describe('Store', () => {
           exerciseId: bench.id,
           exerciseNameAtLogTime: 'Bench Press',
           sets: [
+            emptySet(),
             { weight: 135, reps: 8 },
             { weight: 155, reps: 5 },
           ],
@@ -308,7 +340,10 @@ describe('Store', () => {
 
       const updated = await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
 
-      expect(updated.exercises[0].sets).toEqual([{ weight: 135, reps: 8 }])
+      expect(updated.exercises[0].sets).toEqual([
+        emptySet(),
+        { weight: 135, reps: 8 },
+      ])
     })
 
     it('rejects logging a Set for a nonexistent Session', async () => {
@@ -334,9 +369,12 @@ describe('Store', () => {
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
 
-      const updated = await store.updateSet(logged.id, bench.id, 0, { weight: 145, reps: 6 })
+      const updated = await store.updateSet(logged.id, bench.id, 1, { weight: 145, reps: 6 })
 
-      expect(updated.exercises[0].sets).toEqual([{ weight: 145, reps: 6 }])
+      expect(updated.exercises[0].sets).toEqual([
+        emptySet(),
+        { weight: 145, reps: 6 },
+      ])
     })
 
     it('rejects updating a Set at an out-of-range index', async () => {
@@ -345,7 +383,7 @@ describe('Store', () => {
       const session = await store.startSession(workout.id)
 
       await expect(
-        store.updateSet(session.id, bench.id, 0, { weight: 145, reps: 6 })
+        store.updateSet(session.id, bench.id, 1, { weight: 145, reps: 6 })
       ).rejects.toThrow()
     })
 
@@ -478,9 +516,12 @@ describe('Store', () => {
       await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
       const logged = await store.logSet(session.id, bench.id, { weight: 145, reps: 6 })
 
-      const updated = await store.deleteSet(logged.id, bench.id, 0)
+      const updated = await store.deleteSet(logged.id, bench.id, 1)
 
-      expect(updated.exercises[0].sets).toEqual([{ weight: 145, reps: 6 }])
+      expect(updated.exercises[0].sets).toEqual([
+        emptySet(),
+        { weight: 145, reps: 6 },
+      ])
     })
 
     it('rejects deleting a Set at an out-of-range index', async () => {
@@ -488,7 +529,7 @@ describe('Store', () => {
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
-      await expect(store.deleteSet(session.id, bench.id, 0)).rejects.toThrow()
+      await expect(store.deleteSet(session.id, bench.id, 1)).rejects.toThrow()
     })
 
     it('rejects deleting a Set for a nonexistent Session', async () => {

@@ -1,5 +1,6 @@
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
 import type { EntityTable } from './table'
+import { emptySet } from './types'
 import type {
   Exercise,
   ExportedData,
@@ -9,6 +10,7 @@ import type {
   Workout,
 } from './types'
 
+export { emptySet } from './types'
 export type {
   Exercise,
   ExportedData,
@@ -168,7 +170,7 @@ export class Store {
    * Session (ADR-0001) and denormalizes each Exercise's current name for
    * defensive display in case the Exercise is later deleted. Each Exercise's
    * Sets pre-fill from the most recent prior Session for this Workout, or
-   * start empty if there is none.
+   * start with a single empty set if there is none.
    */
   async startSession(workoutId: string): Promise<Session> {
     const workout = await this.workouts.get(workoutId)
@@ -179,8 +181,8 @@ export class Store {
     const exercises: SessionExerciseEntry[] = await Promise.all(
       workout.exerciseIds.map(async (exerciseId) => {
         const exercise = await this.exercises.get(exerciseId)
-        const priorSets =
-          lastSession?.exercises.find((entry) => entry.exerciseId === exerciseId)?.sets ?? []
+        const priorSets = lastSession?.exercises.find((entry) => entry.exerciseId === exerciseId)
+          ?.sets ?? [emptySet()]
         return {
           exerciseId,
           exerciseNameAtLogTime: exercise?.name ?? exerciseId,
