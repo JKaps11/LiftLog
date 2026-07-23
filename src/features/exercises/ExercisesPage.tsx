@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { PageHeading } from '@/components/ui/page-heading'
 import { store } from '@/store/instance'
@@ -10,8 +11,10 @@ export function ExercisesPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [newName, setNewName] = useState('')
+  const [newIsUnilateral, setNewIsUnilateral] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [editingIsUnilateral, setEditingIsUnilateral] = useState(false)
   const [search, setSearch] = useState('')
 
   const visibleExercises = filterExercisesByName(exercises, search)
@@ -31,20 +34,25 @@ export function ExercisesPage() {
   async function handleAdd(event: FormEvent) {
     event.preventDefault()
     if (!newName.trim()) return
-    await store.createExercise(newName)
+    await store.createExercise(newName, newIsUnilateral)
     setNewName('')
+    setNewIsUnilateral(false)
     await refresh()
   }
 
   function startEditing(exercise: Exercise) {
     setEditingId(exercise.id)
     setEditingName(exercise.name)
+    setEditingIsUnilateral(exercise.isUnilateral)
   }
 
   async function handleRename(event: FormEvent) {
     event.preventDefault()
     if (!editingId || !editingName.trim()) return
-    await store.updateExercise(editingId, { name: editingName })
+    await store.updateExercise(editingId, {
+      name: editingName,
+      isUnilateral: editingIsUnilateral,
+    })
     setEditingId(null)
     await refresh()
   }
@@ -58,14 +66,26 @@ export function ExercisesPage() {
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
       <PageHeading>Exercises</PageHeading>
 
-      <form onSubmit={handleAdd} className="flex gap-2">
-        <Input
-          value={newName}
-          onChange={(event) => setNewName(event.target.value)}
-          placeholder="Add an exercise"
-          aria-label="New exercise name"
-        />
-        <Button type="submit">Add</Button>
+      <form onSubmit={handleAdd} className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <Input
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder="Add an exercise"
+            aria-label="New exercise name"
+          />
+          <Button type="submit">Add</Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="new-exercise-unilateral"
+            checked={newIsUnilateral}
+            onCheckedChange={(checked) => setNewIsUnilateral(checked === true)}
+          />
+          <label htmlFor="new-exercise-unilateral" className="text-sm text-muted-foreground">
+            Unilateral
+          </label>
+        </div>
       </form>
 
       <Input
@@ -87,28 +107,48 @@ export function ExercisesPage() {
               className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5"
             >
               {editingId === exercise.id ? (
-                <form onSubmit={handleRename} className="flex flex-1 gap-2">
-                  <Input
-                    autoFocus
-                    value={editingName}
-                    onChange={(event) => setEditingName(event.target.value)}
-                    aria-label={`Rename ${exercise.name}`}
-                  />
-                  <Button type="submit" size="sm">
-                    Save
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditingId(null)}
-                  >
-                    Cancel
-                  </Button>
+                <form onSubmit={handleRename} className="flex flex-1 flex-col gap-2">
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      value={editingName}
+                      onChange={(event) => setEditingName(event.target.value)}
+                      aria-label={`Rename ${exercise.name}`}
+                    />
+                    <Button type="submit" size="sm">
+                      Save
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEditingId(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`edit-unilateral-${exercise.id}`}
+                      checked={editingIsUnilateral}
+                      onCheckedChange={(checked) => setEditingIsUnilateral(checked === true)}
+                    />
+                    <label
+                      htmlFor={`edit-unilateral-${exercise.id}`}
+                      className="text-sm text-muted-foreground"
+                    >
+                      Unilateral
+                    </label>
+                  </div>
                 </form>
               ) : (
                 <>
-                  <span className="flex-1">{exercise.name}</span>
+                  <span className="flex-1">
+                    {exercise.name}
+                    {exercise.isUnilateral && (
+                      <span className="ml-2 text-xs text-muted-foreground">(unilateral)</span>
+                    )}
+                  </span>
                   <Button variant="outline" size="sm" onClick={() => startEditing(exercise)}>
                     Rename
                   </Button>
