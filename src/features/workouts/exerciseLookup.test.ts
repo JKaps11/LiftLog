@@ -3,7 +3,7 @@ import { filterExercisesByName } from './exerciseLookup'
 import type { Exercise } from '@/store'
 
 function exercise(id: string, name: string): Exercise {
-  return { id, name }
+  return { id, name, isUnilateral: false }
 }
 
 describe('filterExercisesByName', () => {
