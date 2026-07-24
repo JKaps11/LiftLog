@@ -258,11 +258,17 @@ function JumpRail({ groups }: { groups: MuscleGroup[] }) {
         <button
           key={group}
           type="button"
-          onClick={() =>
-            document
-              .getElementById(`exercise-group-${group}`)
-              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }
+          onClick={() => {
+            const target = document.getElementById(`exercise-group-${group}`)
+            if (!target) return
+            // scrollIntoView's block:'start' aligns the section header with the
+            // viewport top, but the rail is sticky and then sits on top of that
+            // same position — offset by the rail's own height so it doesn't
+            // cover the header it just scrolled to.
+            const railHeight = railRef.current?.getBoundingClientRect().height ?? 0
+            const targetTop = target.getBoundingClientRect().top + window.scrollY - railHeight
+            window.scrollTo({ top: targetTop, behavior: 'smooth' })
+          }}
           className={cn(
             'shrink-0 rounded-full border border-border bg-muted px-2.5 py-1 text-xs whitespace-nowrap text-muted-foreground',
             active === group && 'border-accent-foreground bg-accent-foreground text-background'
