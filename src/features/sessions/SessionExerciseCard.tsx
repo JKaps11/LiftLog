@@ -9,7 +9,12 @@ interface SessionExerciseCardProps {
   entry: SessionExerciseEntry
   exercises: Exercise[]
   onAddSet: (exerciseId: string) => void
-  onSetChange: (exerciseId: string, setIndex: number, field: 'weight' | 'reps', value: number) => void
+  onSetChange: (
+    exerciseId: string,
+    setIndex: number,
+    field: 'weight' | 'reps' | 'durationSeconds',
+    value: number
+  ) => void
   onDeleteSet: (exerciseId: string, setIndex: number) => void
 }
 
@@ -54,33 +59,58 @@ export function SessionExerciseCard({
                       </span>
                     )}
                   </span>
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    value={set.weight}
-                    onChange={(event) =>
-                      onSetChange(entry.exerciseId, index, 'weight', Number(event.target.value))
-                    }
-                    aria-label={`${label} weight (lbs) for ${displayName}`}
-                    className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
-                  />
-                  <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                    lbs
-                  </span>
-                  <span className="text-muted-foreground">×</span>
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    value={set.reps}
-                    onChange={(event) =>
-                      onSetChange(entry.exerciseId, index, 'reps', Number(event.target.value))
-                    }
-                    aria-label={`${label} reps for ${displayName}`}
-                    className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
-                  />
-                  <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                    reps
-                  </span>
+                  {set.durationSeconds !== undefined ? (
+                    <>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        value={set.durationSeconds}
+                        onChange={(event) =>
+                          onSetChange(
+                            entry.exerciseId,
+                            index,
+                            'durationSeconds',
+                            Number(event.target.value)
+                          )
+                        }
+                        aria-label={`${label} duration (seconds) for ${displayName}`}
+                        className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
+                      />
+                      <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+                        sec
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        value={set.weight}
+                        onChange={(event) =>
+                          onSetChange(entry.exerciseId, index, 'weight', Number(event.target.value))
+                        }
+                        aria-label={`${label} weight (lbs) for ${displayName}`}
+                        className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
+                      />
+                      <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+                        lbs
+                      </span>
+                      <span className="text-muted-foreground">×</span>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        value={set.reps}
+                        onChange={(event) =>
+                          onSetChange(entry.exerciseId, index, 'reps', Number(event.target.value))
+                        }
+                        aria-label={`${label} reps for ${displayName}`}
+                        className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
+                      />
+                      <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+                        reps
+                      </span>
+                    </>
+                  )}
                   <Button
                     type="button"
                     variant="ghost"
