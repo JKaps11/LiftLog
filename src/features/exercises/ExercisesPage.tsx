@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { PageHeading } from '@/components/ui/page-heading'
+import { SectionLabel } from '@/components/ui/section-label'
 import { store } from '@/store/instance'
 import { EXERCISE_TYPES, MUSCLE_GROUPS, type Exercise, type ExerciseType, type MuscleGroup } from '@/store'
-import { filterExercisesByName } from '@/features/workouts/exerciseLookup'
+import { filterExercisesByName, groupExercisesByMuscleGroup } from '@/features/workouts/exerciseLookup'
 
 const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
   chest: 'Chest',
@@ -30,6 +31,38 @@ const EXERCISE_TYPE_LABELS: Record<ExerciseType, string> = {
 
 const selectClassName =
   'h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm'
+
+/** Categorization + flags shared by the create and edit forms. */
+interface ExerciseDraft {
+  name: string
+  isUnilateral: boolean
+  isTimed: boolean
+  primaryMuscleGroup: MuscleGroup
+  type: ExerciseType
+  otherMuscleGroups: MuscleGroup[]
+}
+
+function draftFromExercise(exercise: Exercise): ExerciseDraft {
+  return {
+    name: exercise.name,
+    isUnilateral: exercise.isUnilateral,
+    isTimed: exercise.isTimed,
+    primaryMuscleGroup: exercise.primaryMuscleGroup,
+    type: exercise.type,
+    otherMuscleGroups: exercise.otherMuscleGroups,
+  }
+}
+
+function emptyDraft(): ExerciseDraft {
+  return {
+    name: '',
+    isUnilateral: false,
+    isTimed: false,
+    primaryMuscleGroup: MUSCLE_GROUPS[0],
+    type: 'strength',
+    otherMuscleGroups: [],
+  }
+}
 
 function toggleMuscleGroup(current: MuscleGroup[], group: MuscleGroup, checked: boolean): MuscleGroup[] {
   return checked ? [...current, group] : current.filter((g) => g !== group)
@@ -96,28 +129,89 @@ function OtherMuscleGroupsFieldset({
   )
 }
 
+/**
+ * The categorization + flag fields shared by the create and edit forms
+ * (everything but the name row). idPrefix must be DOM-id-safe and unique per
+ * form instance (e.g. an exercise id, not its display name, which may repeat
+ * or contain characters unsafe for id/htmlFor pairing); label is the
+ * human-readable text used in aria-labels.
+ */
+function ExerciseCategoryFields({
+  idPrefix,
+  label,
+  draft,
+  onChange,
+}: {
+  idPrefix: string
+  label: string
+  draft: ExerciseDraft
+  onChange: (next: ExerciseDraft) => void
+}) {
+  return (
+    <>
+      <LabeledSelect
+        ariaLabel={`${label} primary muscle group`}
+        value={draft.primaryMuscleGroup}
+        options={MUSCLE_GROUPS}
+        labels={MUSCLE_GROUP_LABELS}
+        onChange={(primaryMuscleGroup) =>
+          onChange({
+            ...draft,
+            primaryMuscleGroup,
+            otherMuscleGroups: draft.otherMuscleGroups.filter((g) => g !== primaryMuscleGroup),
+          })
+        }
+      />
+      <LabeledSelect
+        ariaLabel={`${label} type`}
+        value={draft.type}
+        options={EXERCISE_TYPES}
+        labels={EXERCISE_TYPE_LABELS}
+        onChange={(type) => onChange({ ...draft, type })}
+      />
+      <OtherMuscleGroupsFieldset
+        idPrefix={idPrefix}
+        primaryMuscleGroup={draft.primaryMuscleGroup}
+        selected={draft.otherMuscleGroups}
+        onChange={(otherMuscleGroups) => onChange({ ...draft, otherMuscleGroups })}
+      />
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={`${idPrefix}-unilateral`}
+          checked={draft.isUnilateral}
+          onCheckedChange={(checked) => onChange({ ...draft, isUnilateral: checked === true })}
+        />
+        <label htmlFor={`${idPrefix}-unilateral`} className="text-sm text-muted-foreground">
+          Unilateral
+        </label>
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={`${idPrefix}-timed`}
+          checked={draft.isTimed}
+          onCheckedChange={(checked) => onChange({ ...draft, isTimed: checked === true })}
+        />
+        <label htmlFor={`${idPrefix}-timed`} className="text-sm text-muted-foreground">
+          Timed
+        </label>
+      </div>
+    </>
+  )
+}
+
 export function ExercisesPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [newName, setNewName] = useState('')
-  const [newIsUnilateral, setNewIsUnilateral] = useState(false)
-  const [newIsTimed, setNewIsTimed] = useState(false)
-  const [newPrimaryMuscleGroup, setNewPrimaryMuscleGroup] = useState<MuscleGroup>(MUSCLE_GROUPS[0])
-  const [newType, setNewType] = useState<ExerciseType>('strength')
-  const [newOtherMuscleGroups, setNewOtherMuscleGroups] = useState<MuscleGroup[]>([])
+  const [newDraft, setNewDraft] = useState<ExerciseDraft>(emptyDraft())
   // Tracks whether the Stretch/Mobility -> Timed convenience default has already
   // fired once for this create-form session, so it doesn't re-clobber a manual uncheck.
   const [newTimedAutoDefaulted, setNewTimedAutoDefaulted] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editingName, setEditingName] = useState('')
-  const [editingIsUnilateral, setEditingIsUnilateral] = useState(false)
-  const [editingIsTimed, setEditingIsTimed] = useState(false)
-  const [editingPrimaryMuscleGroup, setEditingPrimaryMuscleGroup] = useState<MuscleGroup>(MUSCLE_GROUPS[0])
-  const [editingType, setEditingType] = useState<ExerciseType>('strength')
-  const [editingOtherMuscleGroups, setEditingOtherMuscleGroups] = useState<MuscleGroup[]>([])
+  const [editingDraft, setEditingDraft] = useState<ExerciseDraft>(emptyDraft())
   const [search, setSearch] = useState('')
 
   const visibleExercises = filterExercisesByName(exercises, search)
+  const groups = groupExercisesByMuscleGroup(visibleExercises)
 
   async function refresh() {
     setExercises(await store.listExercises())
@@ -131,65 +225,31 @@ export function ExercisesPage() {
     })()
   }, [])
 
-  function handleNewPrimaryMuscleGroupChange(group: MuscleGroup) {
-    setNewPrimaryMuscleGroup(group)
-    setNewOtherMuscleGroups((current) => current.filter((g) => g !== group))
-  }
-
-  function handleNewTypeChange(type: ExerciseType) {
-    setNewType(type)
-    if ((type === 'stretch' || type === 'mobility') && !newTimedAutoDefaulted) {
-      setNewIsTimed(true)
-      setNewTimedAutoDefaulted(true)
-    }
-  }
-
-  function handleEditingPrimaryMuscleGroupChange(group: MuscleGroup) {
-    setEditingPrimaryMuscleGroup(group)
-    setEditingOtherMuscleGroups((current) => current.filter((g) => g !== group))
+  function handleNewDraftChange(next: ExerciseDraft) {
+    const shouldAutoDefaultTimed =
+      (next.type === 'stretch' || next.type === 'mobility') && !newTimedAutoDefaulted
+    setNewDraft(shouldAutoDefaultTimed ? { ...next, isTimed: true } : next)
+    if (shouldAutoDefaultTimed) setNewTimedAutoDefaulted(true)
   }
 
   async function handleAdd(event: FormEvent) {
     event.preventDefault()
-    if (!newName.trim()) return
-    await store.createExercise(newName, {
-      isUnilateral: newIsUnilateral,
-      isTimed: newIsTimed,
-      primaryMuscleGroup: newPrimaryMuscleGroup,
-      type: newType,
-      otherMuscleGroups: newOtherMuscleGroups,
-    })
-    setNewName('')
-    setNewIsUnilateral(false)
-    setNewIsTimed(false)
-    setNewPrimaryMuscleGroup(MUSCLE_GROUPS[0])
-    setNewType('strength')
-    setNewOtherMuscleGroups([])
+    if (!newDraft.name.trim()) return
+    await store.createExercise(newDraft.name, newDraft)
+    setNewDraft(emptyDraft())
     setNewTimedAutoDefaulted(false)
     await refresh()
   }
 
   function startEditing(exercise: Exercise) {
     setEditingId(exercise.id)
-    setEditingName(exercise.name)
-    setEditingIsUnilateral(exercise.isUnilateral)
-    setEditingIsTimed(exercise.isTimed)
-    setEditingPrimaryMuscleGroup(exercise.primaryMuscleGroup)
-    setEditingType(exercise.type)
-    setEditingOtherMuscleGroups(exercise.otherMuscleGroups)
+    setEditingDraft(draftFromExercise(exercise))
   }
 
   async function handleRename(event: FormEvent) {
     event.preventDefault()
-    if (!editingId || !editingName.trim()) return
-    await store.updateExercise(editingId, {
-      name: editingName,
-      isUnilateral: editingIsUnilateral,
-      isTimed: editingIsTimed,
-      primaryMuscleGroup: editingPrimaryMuscleGroup,
-      type: editingType,
-      otherMuscleGroups: editingOtherMuscleGroups,
-    })
+    if (!editingId || !editingDraft.name.trim()) return
+    await store.updateExercise(editingId, editingDraft)
     setEditingId(null)
     await refresh()
   }
@@ -206,53 +266,19 @@ export function ExercisesPage() {
       <form onSubmit={handleAdd} className="flex flex-col gap-2">
         <div className="flex gap-2">
           <Input
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
+            value={newDraft.name}
+            onChange={(event) => setNewDraft({ ...newDraft, name: event.target.value })}
             placeholder="Add an exercise"
             aria-label="New exercise name"
           />
           <Button type="submit">Add</Button>
         </div>
-        <LabeledSelect
-          ariaLabel="New exercise primary muscle group"
-          value={newPrimaryMuscleGroup}
-          options={MUSCLE_GROUPS}
-          labels={MUSCLE_GROUP_LABELS}
-          onChange={handleNewPrimaryMuscleGroupChange}
-        />
-        <LabeledSelect
-          ariaLabel="New exercise type"
-          value={newType}
-          options={EXERCISE_TYPES}
-          labels={EXERCISE_TYPE_LABELS}
-          onChange={handleNewTypeChange}
-        />
-        <OtherMuscleGroupsFieldset
+        <ExerciseCategoryFields
           idPrefix="new-exercise"
-          primaryMuscleGroup={newPrimaryMuscleGroup}
-          selected={newOtherMuscleGroups}
-          onChange={setNewOtherMuscleGroups}
+          label="New exercise"
+          draft={newDraft}
+          onChange={handleNewDraftChange}
         />
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="new-exercise-unilateral"
-            checked={newIsUnilateral}
-            onCheckedChange={(checked) => setNewIsUnilateral(checked === true)}
-          />
-          <label htmlFor="new-exercise-unilateral" className="text-sm text-muted-foreground">
-            Unilateral
-          </label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="new-exercise-timed"
-            checked={newIsTimed}
-            onCheckedChange={(checked) => setNewIsTimed(checked === true)}
-          />
-          <label htmlFor="new-exercise-timed" className="text-sm text-muted-foreground">
-            Timed
-          </label>
-        </div>
       </form>
 
       <Input
@@ -267,109 +293,78 @@ export function ExercisesPage() {
       ) : visibleExercises.length === 0 ? (
         <p className="text-muted-foreground">No exercises match "{search.trim()}".</p>
       ) : (
-        <ul className="flex flex-col gap-1">
-          {visibleExercises.map((exercise) => (
-            <li
-              key={exercise.id}
-              className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5"
-            >
-              {editingId === exercise.id ? (
-                <form onSubmit={handleRename} className="flex flex-1 flex-col gap-2">
-                  <div className="flex gap-2">
-                    <Input
-                      autoFocus
-                      value={editingName}
-                      onChange={(event) => setEditingName(event.target.value)}
-                      aria-label={`Rename ${exercise.name}`}
-                    />
-                    <Button type="submit" size="sm">
-                      Save
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingId(null)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                  <LabeledSelect
-                    ariaLabel={`${exercise.name} primary muscle group`}
-                    value={editingPrimaryMuscleGroup}
-                    options={MUSCLE_GROUPS}
-                    labels={MUSCLE_GROUP_LABELS}
-                    onChange={handleEditingPrimaryMuscleGroupChange}
-                  />
-                  <LabeledSelect
-                    ariaLabel={`${exercise.name} type`}
-                    value={editingType}
-                    options={EXERCISE_TYPES}
-                    labels={EXERCISE_TYPE_LABELS}
-                    onChange={setEditingType}
-                  />
-                  <OtherMuscleGroupsFieldset
-                    idPrefix={`edit-${exercise.id}`}
-                    primaryMuscleGroup={editingPrimaryMuscleGroup}
-                    selected={editingOtherMuscleGroups}
-                    onChange={setEditingOtherMuscleGroups}
-                  />
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id={`edit-unilateral-${exercise.id}`}
-                      checked={editingIsUnilateral}
-                      onCheckedChange={(checked) => setEditingIsUnilateral(checked === true)}
-                    />
-                    <label
-                      htmlFor={`edit-unilateral-${exercise.id}`}
-                      className="text-sm text-muted-foreground"
-                    >
-                      Unilateral
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id={`edit-timed-${exercise.id}`}
-                      checked={editingIsTimed}
-                      onCheckedChange={(checked) => setEditingIsTimed(checked === true)}
-                    />
-                    <label
-                      htmlFor={`edit-timed-${exercise.id}`}
-                      className="text-sm text-muted-foreground"
-                    >
-                      Timed
-                    </label>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <span className="flex-1">
-                    {exercise.name}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      ({MUSCLE_GROUP_LABELS[exercise.primaryMuscleGroup]} · {EXERCISE_TYPE_LABELS[exercise.type]})
-                    </span>
-                    {exercise.isUnilateral && (
-                      <span className="ml-2 text-xs text-muted-foreground">(unilateral)</span>
-                    )}
-                    {exercise.isTimed && (
-                      <span className="ml-2 text-xs text-muted-foreground">(timed)</span>
-                    )}
-                  </span>
-                  <Button variant="outline" size="sm" onClick={() => startEditing(exercise)}>
-                    Rename
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDelete(exercise.id)}
+        <div className="flex flex-col gap-4">
+          {groups.map(({ muscleGroup, exercises: groupExercises }) => (
+            <div key={muscleGroup} className="flex flex-col gap-1">
+              <SectionLabel className="mb-0">{MUSCLE_GROUP_LABELS[muscleGroup]}</SectionLabel>
+              <ul className="flex flex-col gap-1">
+                {groupExercises.map((exercise) => (
+                  <li
+                    key={exercise.id}
+                    className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5"
                   >
-                    Delete
-                  </Button>
-                </>
-              )}
-            </li>
+                    {editingId === exercise.id ? (
+                      <form onSubmit={handleRename} className="flex flex-1 flex-col gap-2">
+                        <div className="flex gap-2">
+                          <Input
+                            autoFocus
+                            value={editingDraft.name}
+                            onChange={(event) =>
+                              setEditingDraft({ ...editingDraft, name: event.target.value })
+                            }
+                            aria-label={`Rename ${exercise.name}`}
+                          />
+                          <Button type="submit" size="sm">
+                            Save
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingId(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                        <ExerciseCategoryFields
+                          idPrefix={`edit-${exercise.id}`}
+                          label={exercise.name}
+                          draft={editingDraft}
+                          onChange={setEditingDraft}
+                        />
+                      </form>
+                    ) : (
+                      <>
+                        <span className="flex-1">
+                          {exercise.name}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            ({EXERCISE_TYPE_LABELS[exercise.type]})
+                          </span>
+                          {exercise.isUnilateral && (
+                            <span className="ml-2 text-xs text-muted-foreground">(unilateral)</span>
+                          )}
+                          {exercise.isTimed && (
+                            <span className="ml-2 text-xs text-muted-foreground">(timed)</span>
+                          )}
+                        </span>
+                        <Button variant="outline" size="sm" onClick={() => startEditing(exercise)}>
+                          Rename
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDelete(exercise.id)}
+                        >
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </main>
   )
