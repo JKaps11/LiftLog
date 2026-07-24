@@ -16,6 +16,9 @@ import {
 } from '@/features/workouts/exerciseLookup'
 import { cn } from '@/lib/utils'
 
+/** Must match the sticky header's `top-3` class (0.75rem) in BrowseControls below. */
+const STICKY_TOP_PX = 12
+
 const TYPE_FILTERS: readonly ExerciseTypeFilter[] = ['all', ...EXERCISE_TYPES]
 const TYPE_FILTER_LABELS: Record<ExerciseTypeFilter, string> = {
   all: 'All',
@@ -267,16 +270,21 @@ function BrowseControls({
     const target = document.getElementById(`exercise-group-${group}`)
     if (!target) return
     // scrollIntoView's block:'start' aligns the section header with the
-    // viewport top, but this whole block is sticky and then sits on top of
-    // that same position — offset by its own rendered height so it doesn't
-    // cover the header it just scrolled to.
+    // viewport top, but this whole block is sticky (offset by STICKY_TOP_PX,
+    // see className below) and then sits on top of that same position —
+    // offset by its own rendered height plus that gap so it doesn't cover
+    // the header it just scrolled to.
     const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
-    const targetTop = target.getBoundingClientRect().top + window.scrollY - headerHeight
+    const targetTop = target.getBoundingClientRect().top + window.scrollY - (headerHeight + STICKY_TOP_PX)
     window.scrollTo({ top: targetTop, behavior: 'smooth' })
   }
 
   return (
-    <div ref={headerRef} className="sticky top-0 z-10 flex flex-col gap-2 bg-background pt-3 pb-2">
+    // top-3 (not top-0) so scrolling only opens a gap above the header once it's
+    // actually stuck — padding inside the box instead would also push it down
+    // in its normal, unstuck resting position, widening the gap below the
+    // "+ New exercise" button too.
+    <div ref={headerRef} className="sticky top-3 z-10 flex flex-col gap-2 bg-background pb-2">
       <Input
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
