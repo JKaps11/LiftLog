@@ -50,6 +50,41 @@ export class WorkoutLogsDB extends Dexie {
             exercise.isTimed = seedEntry?.isTimed ?? false
           })
       })
+    /**
+     * Dexie only runs a version's upgrade once per device, keyed off the
+     * version number actually stored there — a device that already opened the
+     * app between the original (buggy, blanket core/strength) version(2) and
+     * this fix would be stuck on wrong data forever, since it's already "at"
+     * version 2 and editing that upgrade function again does nothing for it.
+     * This re-derives from the seed data unconditionally for any exercise
+     * whose current fields still look like that blanket placeholder (rather
+     * than gating on isUnilateral/isTimed matching too — a real placeholder
+     * always pairs core+strength) and has a differing seed entry, so both a
+     * fresh version-1 device and one already stuck on the bad version-2 data
+     * end up correctly categorized.
+     */
+    this.version(3)
+      .stores({
+        exercises: 'id',
+        workouts: 'id',
+        sessions: 'id',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<Exercise, string>('exercises')
+          .toCollection()
+          .modify((exercise) => {
+            const looksLikePlaceholder = exercise.primaryMuscleGroup === 'core' && exercise.type === 'strength'
+            if (!looksLikePlaceholder) return
+            const seedEntry = SEED_BY_NAME.get(exercise.name)
+            if (!seedEntry) return
+            exercise.primaryMuscleGroup = seedEntry.primaryMuscleGroup as MuscleGroup
+            exercise.type = seedEntry.type
+            exercise.otherMuscleGroups = (seedEntry.otherMuscleGroups as MuscleGroup[]) ?? []
+            exercise.isUnilateral = seedEntry.isUnilateral ?? false
+            exercise.isTimed = seedEntry.isTimed ?? false
+          })
+      })
   }
 }
 
