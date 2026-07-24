@@ -85,6 +85,41 @@ export class WorkoutLogsDB extends Dexie {
             exercise.isTimed = seedEntry.isTimed ?? false
           })
       })
+    /**
+     * seedExercisesIfEmpty only ever runs against an empty table, so any device
+     * that had already logged data before a given seed exercise existed (e.g.
+     * the Stretch/Mobility drills added by ADR-0002, or any bundled exercise
+     * added since) never receives it — the exercise silently never appears,
+     * which looks identical to a category having zero exercises. Add any seed
+     * entry whose name isn't already present, so bundled additions reach
+     * every device, not just fresh installs. A user-renamed exercise that
+     * happens to collide with a seed name is not a concern here: this only
+     * ever adds rows, never touches existing ones.
+     */
+    this.version(4)
+      .stores({
+        exercises: 'id',
+        workouts: 'id',
+        sessions: 'id',
+      })
+      .upgrade(async (tx) => {
+        const table = tx.table<Exercise, string>('exercises')
+        const existingNames = new Set((await table.toArray()).map((exercise) => exercise.name))
+        const missing: Exercise[] = EXERCISE_SEED.filter((entry) => !existingNames.has(entry.name)).map(
+          (entry) => ({
+            id: crypto.randomUUID(),
+            name: entry.name,
+            isUnilateral: entry.isUnilateral ?? false,
+            isTimed: entry.isTimed ?? false,
+            primaryMuscleGroup: entry.primaryMuscleGroup as MuscleGroup,
+            otherMuscleGroups: (entry.otherMuscleGroups as MuscleGroup[]) ?? [],
+            type: entry.type as ExerciseType,
+          })
+        )
+        if (missing.length > 0) {
+          await table.bulkAdd(missing)
+        }
+      })
   }
 }
 
