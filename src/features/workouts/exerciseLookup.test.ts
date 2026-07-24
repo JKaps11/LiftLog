@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { filterExercisesByName, groupExercisesByMuscleGroup } from './exerciseLookup'
-import type { Exercise, MuscleGroup } from '@/store'
+import { filterExercisesByName, filterExercisesByType, groupExercisesByMuscleGroup } from './exerciseLookup'
+import type { Exercise, ExerciseType, MuscleGroup } from '@/store'
 
-function exercise(id: string, name: string, primaryMuscleGroup: MuscleGroup = 'core'): Exercise {
+function exercise(
+  id: string,
+  name: string,
+  primaryMuscleGroup: MuscleGroup = 'core',
+  type: ExerciseType = 'strength'
+): Exercise {
   return {
     id,
     name,
@@ -10,7 +15,7 @@ function exercise(id: string, name: string, primaryMuscleGroup: MuscleGroup = 'c
     isTimed: false,
     primaryMuscleGroup,
     otherMuscleGroups: [],
-    type: 'strength',
+    type,
   }
 }
 
@@ -38,6 +43,26 @@ describe('filterExercisesByName', () => {
 
   it('returns an empty array when nothing matches', () => {
     expect(filterExercisesByName(exercises, 'squat')).toEqual([])
+  })
+})
+
+describe('filterExercisesByType', () => {
+  const exercises = [
+    exercise('1', 'Bench Press', 'chest', 'strength'),
+    exercise('2', 'Chest Doorway Stretch', 'chest', 'stretch'),
+    exercise('3', 'Shoulder Circles Mobility Drill', 'shoulders', 'mobility'),
+  ]
+
+  it('returns all exercises when the filter is "all"', () => {
+    expect(filterExercisesByType(exercises, 'all')).toEqual(exercises)
+  })
+
+  it('narrows to a single type', () => {
+    expect(filterExercisesByType(exercises, 'stretch')).toEqual([exercises[1]])
+  })
+
+  it('returns an empty array when no exercise matches the type', () => {
+    expect(filterExercisesByType([exercises[0]], 'mobility')).toEqual([])
   })
 })
 

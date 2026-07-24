@@ -31,6 +31,16 @@ export function filterExercisesByName(exercises: Exercise[], query: string): Exe
   return exercises.filter((exercise) => exercise.name.toLowerCase().includes(normalized))
 }
 
+export type ExerciseTypeFilter = ExerciseType | 'all'
+
+export function filterExercisesByType(
+  exercises: Exercise[],
+  type: ExerciseTypeFilter
+): Exercise[] {
+  if (type === 'all') return exercises
+  return exercises.filter((exercise) => exercise.type === type)
+}
+
 export interface ExerciseGroup {
   muscleGroup: MuscleGroup
   exercises: Exercise[]

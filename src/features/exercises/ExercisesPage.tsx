@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -9,9 +9,18 @@ import { EXERCISE_TYPES, MUSCLE_GROUPS, type Exercise, type ExerciseType, type M
 import {
   EXERCISE_TYPE_LABELS,
   filterExercisesByName,
+  filterExercisesByType,
   groupExercisesByMuscleGroup,
   MUSCLE_GROUP_LABELS,
+  type ExerciseTypeFilter,
 } from '@/features/workouts/exerciseLookup'
+import { cn } from '@/lib/utils'
+
+const TYPE_FILTERS: readonly ExerciseTypeFilter[] = ['all', ...EXERCISE_TYPES]
+const TYPE_FILTER_LABELS: Record<ExerciseTypeFilter, string> = {
+  all: 'All',
+  ...EXERCISE_TYPE_LABELS,
+}
 
 const selectClassName =
   'h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm'
@@ -183,6 +192,89 @@ function ExerciseCategoryFields({
   )
 }
 
+/** Single-select scope filter: each exercise has exactly one type, so this is a segmented control, not a toggle group. */
+function TypeFilterControl({
+  value,
+  onChange,
+}: {
+  value: ExerciseTypeFilter
+  onChange: (next: ExerciseTypeFilter) => void
+}) {
+  return (
+    <div role="group" aria-label="Filter by type" className="flex rounded-lg border border-border">
+      {TYPE_FILTERS.map((type, index) => (
+        <button
+          key={type}
+          type="button"
+          onClick={() => onChange(type)}
+          aria-pressed={value === type}
+          className={cn(
+            'flex-1 px-1 py-1.5 text-[0.8125rem] text-muted-foreground',
+            index !== TYPE_FILTERS.length - 1 && 'border-r border-border',
+            value === type && 'bg-accent-foreground font-semibold text-background'
+          )}
+        >
+          {TYPE_FILTER_LABELS[type]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Sticky jump-to-group strip (Apple HIG's alphabet-index pattern, generalized
+ * to muscle-group category) so a long grouped list is reachable in one tap
+ * instead of scroll-only. Highlights the group nearest the top of the
+ * viewport as the user scrolls.
+ */
+function JumpRail({ groups }: { groups: MuscleGroup[] }) {
+  const [active, setActive] = useState<MuscleGroup | null>(null)
+  const railRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function updateActive() {
+      const railBottom = railRef.current?.getBoundingClientRect().bottom ?? 0
+      let current: MuscleGroup | null = null
+      for (const group of groups) {
+        const section = document.getElementById(`exercise-group-${group}`)
+        if (section && section.getBoundingClientRect().top - railBottom < 40) current = group
+      }
+      setActive(current)
+    }
+    updateActive()
+    window.addEventListener('scroll', updateActive, { passive: true })
+    return () => window.removeEventListener('scroll', updateActive)
+  }, [groups])
+
+  if (groups.length === 0) return null
+
+  return (
+    <nav
+      ref={railRef}
+      aria-label="Jump to muscle group"
+      className="sticky top-0 z-10 flex gap-1.5 overflow-x-auto bg-gradient-to-b from-background from-75% to-transparent py-1 [scrollbar-width:none]"
+    >
+      {groups.map((group) => (
+        <button
+          key={group}
+          type="button"
+          onClick={() =>
+            document
+              .getElementById(`exercise-group-${group}`)
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+          className={cn(
+            'shrink-0 rounded-full border border-border bg-muted px-2.5 py-1 text-xs whitespace-nowrap text-muted-foreground',
+            active === group && 'border-accent-foreground bg-accent-foreground text-background'
+          )}
+        >
+          {MUSCLE_GROUP_LABELS[group]}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 export function ExercisesPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -193,8 +285,10 @@ export function ExercisesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingDraft, setEditingDraft] = useState<ExerciseDraft>(emptyDraft())
   const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState<ExerciseTypeFilter>('all')
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
 
-  const visibleExercises = filterExercisesByName(exercises, search)
+  const visibleExercises = filterExercisesByType(filterExercisesByName(exercises, search), typeFilter)
   const groups = groupExercisesByMuscleGroup(visibleExercises)
 
   async function refresh() {
@@ -247,23 +341,35 @@ export function ExercisesPage() {
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
       <PageHeading>Exercises</PageHeading>
 
-      <form onSubmit={handleAdd} className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <Input
-            value={newDraft.name}
-            onChange={(event) => setNewDraft({ ...newDraft, name: event.target.value })}
-            placeholder="Add an exercise"
-            aria-label="New exercise name"
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setIsCreateOpen(!isCreateOpen)}
+        aria-expanded={isCreateOpen}
+        className="justify-between border-dashed text-muted-foreground"
+      >
+        <span>+ New exercise</span>
+        <span>{isCreateOpen ? '▲' : '▼'}</span>
+      </Button>
+      {isCreateOpen && (
+        <form onSubmit={handleAdd} className="flex flex-col gap-3 rounded-lg border border-border p-3">
+          <div className="flex gap-2">
+            <Input
+              value={newDraft.name}
+              onChange={(event) => setNewDraft({ ...newDraft, name: event.target.value })}
+              placeholder="Add an exercise"
+              aria-label="New exercise name"
+            />
+            <Button type="submit">Add</Button>
+          </div>
+          <ExerciseCategoryFields
+            idPrefix="new-exercise"
+            label="New exercise"
+            draft={newDraft}
+            onChange={handleNewDraftChange}
           />
-          <Button type="submit">Add</Button>
-        </div>
-        <ExerciseCategoryFields
-          idPrefix="new-exercise"
-          label="New exercise"
-          draft={newDraft}
-          onChange={handleNewDraftChange}
-        />
-      </form>
+        </form>
+      )}
 
       <Input
         value={search}
@@ -272,14 +378,20 @@ export function ExercisesPage() {
         aria-label="Search exercises"
       />
 
+      <TypeFilterControl value={typeFilter} onChange={setTypeFilter} />
+
+      <JumpRail groups={groups.map((g) => g.muscleGroup)} />
+
       {isLoading ? (
         <p className="text-muted-foreground">Loading exercises…</p>
       ) : visibleExercises.length === 0 ? (
-        <p className="text-muted-foreground">No exercises match "{search.trim()}".</p>
+        <p className="text-muted-foreground">
+          {search.trim() ? `No exercises match "${search.trim()}".` : 'No exercises match this filter.'}
+        </p>
       ) : (
         <div className="flex flex-col gap-4">
           {groups.map(({ muscleGroup, exercises: groupExercises }) => (
-            <div key={muscleGroup} className="flex flex-col gap-1">
+            <div key={muscleGroup} id={`exercise-group-${muscleGroup}`} className="flex flex-col gap-1">
               <SectionLabel className="mb-0">{MUSCLE_GROUP_LABELS[muscleGroup]}</SectionLabel>
               <ul className="flex flex-col gap-1">
                 {groupExercises.map((exercise) => (
