@@ -12,9 +12,11 @@ export function ExercisesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [newName, setNewName] = useState('')
   const [newIsUnilateral, setNewIsUnilateral] = useState(false)
+  const [newIsTimed, setNewIsTimed] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [editingIsUnilateral, setEditingIsUnilateral] = useState(false)
+  const [editingIsTimed, setEditingIsTimed] = useState(false)
   const [search, setSearch] = useState('')
 
   const visibleExercises = filterExercisesByName(exercises, search)
@@ -34,9 +36,10 @@ export function ExercisesPage() {
   async function handleAdd(event: FormEvent) {
     event.preventDefault()
     if (!newName.trim()) return
-    await store.createExercise(newName, newIsUnilateral)
+    await store.createExercise(newName, newIsUnilateral, newIsTimed)
     setNewName('')
     setNewIsUnilateral(false)
+    setNewIsTimed(false)
     await refresh()
   }
 
@@ -44,6 +47,7 @@ export function ExercisesPage() {
     setEditingId(exercise.id)
     setEditingName(exercise.name)
     setEditingIsUnilateral(exercise.isUnilateral)
+    setEditingIsTimed(exercise.isTimed)
   }
 
   async function handleRename(event: FormEvent) {
@@ -52,6 +56,7 @@ export function ExercisesPage() {
     await store.updateExercise(editingId, {
       name: editingName,
       isUnilateral: editingIsUnilateral,
+      isTimed: editingIsTimed,
     })
     setEditingId(null)
     await refresh()
@@ -84,6 +89,16 @@ export function ExercisesPage() {
           />
           <label htmlFor="new-exercise-unilateral" className="text-sm text-muted-foreground">
             Unilateral
+          </label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="new-exercise-timed"
+            checked={newIsTimed}
+            onCheckedChange={(checked) => setNewIsTimed(checked === true)}
+          />
+          <label htmlFor="new-exercise-timed" className="text-sm text-muted-foreground">
+            Timed
           </label>
         </div>
       </form>
@@ -140,6 +155,19 @@ export function ExercisesPage() {
                       Unilateral
                     </label>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`edit-timed-${exercise.id}`}
+                      checked={editingIsTimed}
+                      onCheckedChange={(checked) => setEditingIsTimed(checked === true)}
+                    />
+                    <label
+                      htmlFor={`edit-timed-${exercise.id}`}
+                      className="text-sm text-muted-foreground"
+                    >
+                      Timed
+                    </label>
+                  </div>
                 </form>
               ) : (
                 <>
@@ -147,6 +175,9 @@ export function ExercisesPage() {
                     {exercise.name}
                     {exercise.isUnilateral && (
                       <span className="ml-2 text-xs text-muted-foreground">(unilateral)</span>
+                    )}
+                    {exercise.isTimed && (
+                      <span className="ml-2 text-xs text-muted-foreground">(timed)</span>
                     )}
                   </span>
                   <Button variant="outline" size="sm" onClick={() => startEditing(exercise)}>
