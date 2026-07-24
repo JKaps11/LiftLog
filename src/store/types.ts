@@ -1,8 +1,39 @@
+/** Declared order is the fixed display/grouping order used by exercise-browsing UI (not alphabetical). */
+export const MUSCLE_GROUPS = [
+  'chest',
+  'back',
+  'shoulders',
+  'biceps',
+  'triceps',
+  'forearms',
+  'quads',
+  'hamstrings',
+  'glutes',
+  'calves',
+  'core',
+  'neck',
+] as const
+
+export type MuscleGroup = (typeof MUSCLE_GROUPS)[number]
+
+export const EXERCISE_TYPES = ['strength', 'stretch', 'mobility'] as const
+
+export type ExerciseType = (typeof EXERCISE_TYPES)[number]
+
+/**
+ * primaryMuscleGroup and type are independent axes (ADR-0002) — an Exercise's
+ * muscle group doesn't change based on whether it's a Strength movement or a
+ * Stretch, and vice versa. otherMuscleGroups is captured for exercises that
+ * span more than one region, but has no dedicated filter UI yet.
+ */
 export interface Exercise {
   id: string
   name: string
   isUnilateral: boolean
   isTimed: boolean
+  primaryMuscleGroup: MuscleGroup
+  otherMuscleGroups: MuscleGroup[]
+  type: ExerciseType
 }
 
 /** exerciseIds is an ordered list — order is significant and must be preserved. */

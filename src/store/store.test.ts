@@ -43,11 +43,24 @@ function createInMemoryTable<T extends { id: string }>(): EntityTable<T> {
   }
 }
 
+/** Default categorization for tests that aren't exercising the categorization fields themselves. */
+const DEFAULT_CATEGORIZATION = {
+  primaryMuscleGroup: 'core' as const,
+  type: 'strength' as const,
+}
+
 describe('Store', () => {
   let exercises: EntityTable<Exercise>
   let workouts: EntityTable<Workout>
   let sessions: EntityTable<Session>
   let store: Store
+
+  function createExercise(
+    name: string,
+    options: Partial<Parameters<Store['createExercise']>[1]> = {}
+  ) {
+    return store.createExercise(name, { ...DEFAULT_CATEGORIZATION, ...options })
+  }
 
   beforeEach(() => {
     exercises = createInMemoryTable<Exercise>()
@@ -78,7 +91,7 @@ describe('Store', () => {
 
     it('does not re-seed or duplicate on a later call', async () => {
       await store.seedExercisesIfEmpty()
-      const custom = await store.createExercise('My Custom Move')
+      const custom = await createExercise('My Custom Move')
 
       await store.seedExercisesIfEmpty()
 
@@ -104,11 +117,22 @@ describe('Store', () => {
       const all = await relaunchedStore.listExercises()
       expect(all).toHaveLength(EXERCISE_SEED.length)
     })
+
+    it('gives every seeded exercise a populated primaryMuscleGroup and type', async () => {
+      await store.seedExercisesIfEmpty()
+
+      const all = await store.listExercises()
+      for (const exercise of all) {
+        expect(exercise.primaryMuscleGroup).toBeTruthy()
+        expect(exercise.type).toBeTruthy()
+        expect(exercise.otherMuscleGroups).toEqual([])
+      }
+    })
   })
 
   describe('createExercise', () => {
     it('adds a new exercise with just a name', async () => {
-      const exercise = await store.createExercise('Bench Press')
+      const exercise = await createExercise('Bench Press')
 
       expect(exercise.name).toBe('Bench Press')
       expect(exercise.id).toBeTruthy()
@@ -116,23 +140,23 @@ describe('Store', () => {
     })
 
     it('trims whitespace from the name', async () => {
-      const exercise = await store.createExercise('  Squat  ')
+      const exercise = await createExercise('  Squat  ')
       expect(exercise.name).toBe('Squat')
     })
 
     it('rejects an empty name', async () => {
-      await expect(store.createExercise('   ')).rejects.toThrow()
+      await expect(createExercise('   ')).rejects.toThrow()
     })
   })
 
   describe('createExercise (isUnilateral)', () => {
     it('defaults isUnilateral to false when omitted', async () => {
-      const exercise = await store.createExercise('Bench Press')
+      const exercise = await createExercise('Bench Press')
       expect(exercise.isUnilateral).toBe(false)
     })
 
     it('persists isUnilateral when passed', async () => {
-      const exercise = await store.createExercise('Single Arm Row', { isUnilateral: true })
+      const exercise = await createExercise('Single Arm Row', { isUnilateral: true })
       expect(exercise.isUnilateral).toBe(true)
       expect(await store.listExercises()).toEqual([exercise])
     })
@@ -140,20 +164,48 @@ describe('Store', () => {
 
   describe('createExercise (isTimed)', () => {
     it('defaults isTimed to false when omitted', async () => {
-      const exercise = await store.createExercise('Plank')
+      const exercise = await createExercise('Plank')
       expect(exercise.isTimed).toBe(false)
     })
 
     it('persists isTimed when passed', async () => {
-      const exercise = await store.createExercise('Plank', { isTimed: true })
+      const exercise = await createExercise('Plank', { isTimed: true })
       expect(exercise.isTimed).toBe(true)
+      expect(await store.listExercises()).toEqual([exercise])
+    })
+  })
+
+  describe('createExercise (categorization)', () => {
+    it('persists primaryMuscleGroup and type', async () => {
+      const exercise = await createExercise('Hamstring Stretch', {
+        primaryMuscleGroup: 'hamstrings',
+        type: 'stretch',
+      })
+
+      expect(exercise.primaryMuscleGroup).toBe('hamstrings')
+      expect(exercise.type).toBe('stretch')
+      expect(await store.listExercises()).toEqual([exercise])
+    })
+
+    it('defaults otherMuscleGroups to an empty array when omitted', async () => {
+      const exercise = await createExercise('Deadlift', { primaryMuscleGroup: 'back' })
+      expect(exercise.otherMuscleGroups).toEqual([])
+    })
+
+    it('persists otherMuscleGroups when passed', async () => {
+      const exercise = await createExercise('Deadlift', {
+        primaryMuscleGroup: 'back',
+        otherMuscleGroups: ['hamstrings', 'glutes'],
+      })
+
+      expect(exercise.otherMuscleGroups).toEqual(['hamstrings', 'glutes'])
       expect(await store.listExercises()).toEqual([exercise])
     })
   })
 
   describe('updateExercise', () => {
     it('updates the name of an existing exercise', async () => {
-      const exercise = await store.createExercise('Bemch Press')
+      const exercise = await createExercise('Bemch Press')
 
       const renamed = await store.updateExercise(exercise.id, { name: 'Bench Press' })
 
@@ -169,12 +221,12 @@ describe('Store', () => {
     })
 
     it('rejects an empty name', async () => {
-      const exercise = await store.createExercise('Bench Press')
+      const exercise = await createExercise('Bench Press')
       await expect(store.updateExercise(exercise.id, { name: '   ' })).rejects.toThrow()
     })
 
     it('toggles isUnilateral on an existing exercise, false to true', async () => {
-      const exercise = await store.createExercise('Single Arm Row')
+      const exercise = await createExercise('Single Arm Row')
 
       const updated = await store.updateExercise(exercise.id, { isUnilateral: true })
 
@@ -183,7 +235,7 @@ describe('Store', () => {
     })
 
     it('toggles isUnilateral on an existing exercise, true to false', async () => {
-      const exercise = await store.createExercise('Single Arm Row', { isUnilateral: true })
+      const exercise = await createExercise('Single Arm Row', { isUnilateral: true })
 
       const updated = await store.updateExercise(exercise.id, { isUnilateral: false })
 
@@ -191,7 +243,7 @@ describe('Store', () => {
     })
 
     it('leaves fields unspecified in the update untouched', async () => {
-      const exercise = await store.createExercise('Single Arm Row', { isUnilateral: true })
+      const exercise = await createExercise('Single Arm Row', { isUnilateral: true })
 
       const updated = await store.updateExercise(exercise.id, { name: 'Single-Arm Row' })
 
@@ -199,7 +251,7 @@ describe('Store', () => {
     })
 
     it('toggles isTimed on an existing exercise, false to true', async () => {
-      const exercise = await store.createExercise('Plank')
+      const exercise = await createExercise('Plank')
 
       const updated = await store.updateExercise(exercise.id, { isTimed: true })
 
@@ -208,7 +260,7 @@ describe('Store', () => {
     })
 
     it('toggles isTimed on an existing exercise, true to false', async () => {
-      const exercise = await store.createExercise('Plank', { isTimed: true })
+      const exercise = await createExercise('Plank', { isTimed: true })
 
       const updated = await store.updateExercise(exercise.id, { isTimed: false })
 
@@ -216,7 +268,7 @@ describe('Store', () => {
     })
 
     it('leaves isTimed untouched when unspecified in the update', async () => {
-      const exercise = await store.createExercise('Plank', { isTimed: true })
+      const exercise = await createExercise('Plank', { isTimed: true })
 
       const updated = await store.updateExercise(exercise.id, { name: 'Plank Hold' })
 
@@ -224,9 +276,68 @@ describe('Store', () => {
     })
   })
 
+  describe('updateExercise (categorization)', () => {
+    it('independently updates primaryMuscleGroup without disturbing type or otherMuscleGroups', async () => {
+      const exercise = await createExercise('Hamstring Stretch', {
+        primaryMuscleGroup: 'hamstrings',
+        type: 'stretch',
+        otherMuscleGroups: ['glutes'],
+      })
+
+      const updated = await store.updateExercise(exercise.id, { primaryMuscleGroup: 'glutes' })
+
+      expect(updated.primaryMuscleGroup).toBe('glutes')
+      expect(updated.type).toBe('stretch')
+      expect(updated.otherMuscleGroups).toEqual(['glutes'])
+    })
+
+    it('independently updates type without disturbing primaryMuscleGroup or otherMuscleGroups', async () => {
+      const exercise = await createExercise('Hamstring Stretch', {
+        primaryMuscleGroup: 'hamstrings',
+        type: 'stretch',
+      })
+
+      const updated = await store.updateExercise(exercise.id, { type: 'mobility' })
+
+      expect(updated.type).toBe('mobility')
+      expect(updated.primaryMuscleGroup).toBe('hamstrings')
+    })
+
+    it('independently updates otherMuscleGroups without disturbing primaryMuscleGroup, type, isUnilateral, or isTimed', async () => {
+      const exercise = await createExercise('Hamstring Stretch', {
+        primaryMuscleGroup: 'hamstrings',
+        type: 'stretch',
+        isUnilateral: true,
+        isTimed: true,
+      })
+
+      const updated = await store.updateExercise(exercise.id, { otherMuscleGroups: ['glutes', 'back'] })
+
+      expect(updated.otherMuscleGroups).toEqual(['glutes', 'back'])
+      expect(updated.primaryMuscleGroup).toBe('hamstrings')
+      expect(updated.type).toBe('stretch')
+      expect(updated.isUnilateral).toBe(true)
+      expect(updated.isTimed).toBe(true)
+    })
+
+    it('leaves categorization fields untouched when unspecified in the update', async () => {
+      const exercise = await createExercise('Hamstring Stretch', {
+        primaryMuscleGroup: 'hamstrings',
+        type: 'stretch',
+        otherMuscleGroups: ['glutes'],
+      })
+
+      const updated = await store.updateExercise(exercise.id, { name: 'Hamstring Hold' })
+
+      expect(updated.primaryMuscleGroup).toBe('hamstrings')
+      expect(updated.type).toBe('stretch')
+      expect(updated.otherMuscleGroups).toEqual(['glutes'])
+    })
+  })
+
   describe('deleteExercise', () => {
     it('removes the exercise from the list', async () => {
-      const exercise = await store.createExercise('Deadlift')
+      const exercise = await createExercise('Deadlift')
 
       await store.deleteExercise(exercise.id)
 
@@ -236,9 +347,9 @@ describe('Store', () => {
 
   describe('createWorkout', () => {
     it('creates a Workout with a name and preserves Exercise order as stored/retrieved', async () => {
-      const bench = await store.createExercise('Bench Press')
-      const ohp = await store.createExercise('Overhead Press')
-      const dips = await store.createExercise('Dips')
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
+      const dips = await createExercise('Dips')
 
       const workout = await store.createWorkout('Push Day', [bench.id, ohp.id, dips.id])
 
@@ -275,9 +386,9 @@ describe('Store', () => {
     })
 
     it('updates the Exercise list (add/remove), preserving the given order', async () => {
-      const squat = await store.createExercise('Squat')
-      const lunge = await store.createExercise('Lunge')
-      const calfRaise = await store.createExercise('Calf Raise')
+      const squat = await createExercise('Squat')
+      const lunge = await createExercise('Lunge')
+      const calfRaise = await createExercise('Calf Raise')
       const workout = await store.createWorkout('Leg Day', [squat.id, lunge.id])
 
       const updated = await store.updateWorkout(workout.id, {
@@ -288,7 +399,7 @@ describe('Store', () => {
     })
 
     it('leaves fields unspecified in the update untouched', async () => {
-      const squat = await store.createExercise('Squat')
+      const squat = await createExercise('Squat')
       const workout = await store.createWorkout('Leg Day', [squat.id])
 
       const updated = await store.updateWorkout(workout.id, { name: 'Leg Day (Heavy)' })
@@ -318,9 +429,9 @@ describe('Store', () => {
 
   describe('reorderWorkoutExercises', () => {
     it('reorders the Exercises within a Workout, preserving the new order as stored/retrieved', async () => {
-      const bench = await store.createExercise('Bench Press')
-      const ohp = await store.createExercise('Overhead Press')
-      const dips = await store.createExercise('Dips')
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
+      const dips = await createExercise('Dips')
       const workout = await store.createWorkout('Push Day', [bench.id, ohp.id, dips.id])
 
       const reordered = await store.reorderWorkoutExercises(workout.id, [
@@ -335,8 +446,8 @@ describe('Store', () => {
     })
 
     it('rejects a reorder that does not contain exactly the same set of Exercise ids', async () => {
-      const bench = await store.createExercise('Bench Press')
-      const ohp = await store.createExercise('Overhead Press')
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
       const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
 
       await expect(store.reorderWorkoutExercises(workout.id, [bench.id])).rejects.toThrow()
@@ -349,8 +460,8 @@ describe('Store', () => {
 
   describe('startSession', () => {
     it('snapshots the Workout name and Exercise list, denormalizing each Exercise name, with one empty set when there is no prior Session', async () => {
-      const bench = await store.createExercise('Bench Press')
-      const ohp = await store.createExercise('Overhead Press')
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
       const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
 
       const session = await store.startSession(workout.id)
@@ -367,8 +478,8 @@ describe('Store', () => {
     })
 
     it('pre-fills a new Exercise added to an already-logged Workout with one empty set', async () => {
-      const bench = await store.createExercise('Bench Press')
-      const ohp = await store.createExercise('Overhead Press')
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
 
       const first = await store.startSession(workout.id)
@@ -391,7 +502,7 @@ describe('Store', () => {
     })
 
     it('pre-fills each Exercise with sets from the most recent prior Session for the same Workout', async () => {
-      const bench = await store.createExercise('Bench Press')
+      const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
 
       const first = await store.startSession(workout.id)
@@ -420,7 +531,7 @@ describe('Store', () => {
 
   describe('logSet', () => {
     it('appends a new Set to the given Exercise within the Session', async () => {
-      const bench = await store.createExercise('Bench Press')
+      const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
@@ -448,7 +559,7 @@ describe('Store', () => {
     })
 
     it('appends a left+right pair for a unilateral Exercise', async () => {
-      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
 
@@ -462,7 +573,7 @@ describe('Store', () => {
     })
 
     it('does not add a side for a non-unilateral Exercise', async () => {
-      const bench = await store.createExercise('Bench Press', { isUnilateral: false })
+      const bench = await createExercise('Bench Press', { isUnilateral: false })
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
@@ -472,7 +583,7 @@ describe('Store', () => {
     })
 
     it('appends a duration-only Set with no explicit set argument, for a timed Exercise', async () => {
-      const plank = await store.createExercise('Plank', { isTimed: true })
+      const plank = await createExercise('Plank', { isTimed: true })
       const workout = await store.createWorkout('Core', [plank.id])
       const session = await store.startSession(workout.id)
 
@@ -482,7 +593,7 @@ describe('Store', () => {
     })
 
     it('appends a left+right pair of duration-only Sets for a timed and unilateral Exercise', async () => {
-      const stretch = await store.createExercise('Single Leg Hamstring Stretch', { isUnilateral: true, isTimed: true })
+      const stretch = await createExercise('Single Leg Hamstring Stretch', { isUnilateral: true, isTimed: true })
       const workout = await store.createWorkout('Mobility', [stretch.id])
       const session = await store.startSession(workout.id)
 
@@ -496,7 +607,7 @@ describe('Store', () => {
     })
 
     it('appends weight/reps Set with no explicit set argument, for a non-timed Exercise', async () => {
-      const bench = await store.createExercise('Bench Press')
+      const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
@@ -508,7 +619,7 @@ describe('Store', () => {
 
   describe('updateSet', () => {
     it('updates the weight/reps of an existing Set', async () => {
-      const bench = await store.createExercise('Bench Press')
+      const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
@@ -522,7 +633,7 @@ describe('Store', () => {
     })
 
     it('rejects updating a Set at an out-of-range index', async () => {
-      const bench = await store.createExercise('Bench Press')
+      const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
@@ -638,8 +749,8 @@ describe('Store', () => {
 
   describe('ADR-0001: Sessions snapshot their Workout, independent of later edits', () => {
     it('does not change a past Session when the Workout is renamed or its Exercises edited afterward', async () => {
-      const bench = await store.createExercise('Bench Press')
-      const ohp = await store.createExercise('Overhead Press')
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
@@ -654,7 +765,7 @@ describe('Store', () => {
 
   describe('deleteSet', () => {
     it('removes a Set at the given index from an Exercise within a Session', async () => {
-      const bench = await store.createExercise('Bench Press')
+      const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
       await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
@@ -669,7 +780,7 @@ describe('Store', () => {
     })
 
     it('rejects deleting a Set at an out-of-range index', async () => {
-      const bench = await store.createExercise('Bench Press')
+      const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
@@ -681,7 +792,7 @@ describe('Store', () => {
     })
 
     it('deleting the left Set of a unilateral pair removes both', async () => {
-      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -692,7 +803,7 @@ describe('Store', () => {
     })
 
     it('deleting the right Set of a unilateral pair removes both', async () => {
-      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -703,7 +814,7 @@ describe('Store', () => {
     })
 
     it('deleting either Set of a timed+unilateral pair removes both', async () => {
-      const stretch = await store.createExercise('Single Leg Hamstring Stretch', { isUnilateral: true, isTimed: true })
+      const stretch = await createExercise('Single Leg Hamstring Stretch', { isUnilateral: true, isTimed: true })
       const workout = await store.createWorkout('Mobility', [stretch.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, stretch.id)
@@ -714,7 +825,7 @@ describe('Store', () => {
     })
 
     it('deleting one pair leaves other Sets/pairs intact and in order', async () => {
-      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -732,7 +843,7 @@ describe('Store', () => {
 
   describe('unilateral Exercises do not retroactively reinterpret past Sets', () => {
     it('leaves a Set logged before the Exercise was unilateral unmodified after the flag is toggled on', async () => {
-      const row = await store.createExercise('Single Arm Row', { isUnilateral: false })
+      const row = await createExercise('Single Arm Row', { isUnilateral: false })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -745,7 +856,7 @@ describe('Store', () => {
     })
 
     it('leaves paired Sets unmodified after the Exercise is later un-flagged as unilateral', async () => {
-      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -764,7 +875,7 @@ describe('Store', () => {
 
   describe('timed Exercises do not retroactively reinterpret past Sets', () => {
     it('leaves a weight/reps Set unmodified after its Exercise is later marked timed', async () => {
-      const plank = await store.createExercise('Plank', { isTimed: false })
+      const plank = await createExercise('Plank', { isTimed: false })
       const workout = await store.createWorkout('Core', [plank.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, plank.id, { weight: 0, reps: 30 })
@@ -777,7 +888,7 @@ describe('Store', () => {
     })
 
     it('leaves a duration Set unmodified after its Exercise is later un-flagged as timed', async () => {
-      const plank = await store.createExercise('Plank', { isTimed: true })
+      const plank = await createExercise('Plank', { isTimed: true })
       const workout = await store.createWorkout('Core', [plank.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, plank.id, { durationSeconds: 45 })
@@ -871,8 +982,8 @@ describe('Store', () => {
 
   describe('exportData / importData', () => {
     it('round-trips all Exercises, Workouts, and Sessions through export then import', async () => {
-      const bench = await store.createExercise('Bench Press')
-      const ohp = await store.createExercise('Overhead Press')
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
       const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
       const session = await store.startSession(workout.id)
       await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
@@ -896,7 +1007,7 @@ describe('Store', () => {
     })
 
     it('replaces any existing data on import rather than merging with it', async () => {
-      await store.createExercise('Old Exercise')
+      await createExercise('Old Exercise')
       const exported = await store.exportData()
 
       const otherExercises = createInMemoryTable<Exercise>()
@@ -907,7 +1018,7 @@ describe('Store', () => {
         workouts: otherWorkouts,
         sessions: otherSessions,
       })
-      await otherStore.createExercise('Should be replaced')
+      await otherStore.createExercise('Should be replaced', DEFAULT_CATEGORIZATION)
 
       await otherStore.importData(exported)
 
@@ -925,7 +1036,7 @@ describe('Store', () => {
 
   describe('resolveExerciseDisplayName', () => {
     it('prefers the live Exercise name when the Exercise still exists (renames follow through to past Sessions)', async () => {
-      const bench = await store.createExercise('Bemch Press')
+      const bench = await createExercise('Bemch Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
@@ -937,7 +1048,7 @@ describe('Store', () => {
     })
 
     it('falls back to the denormalized name captured at log time when the Exercise has been deleted', async () => {
-      const bench = await store.createExercise('Bench Press')
+      const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 

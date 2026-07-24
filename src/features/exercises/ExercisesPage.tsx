@@ -4,8 +4,97 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { PageHeading } from '@/components/ui/page-heading'
 import { store } from '@/store/instance'
-import type { Exercise } from '@/store'
+import { EXERCISE_TYPES, MUSCLE_GROUPS, type Exercise, type ExerciseType, type MuscleGroup } from '@/store'
 import { filterExercisesByName } from '@/features/workouts/exerciseLookup'
+
+const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
+  chest: 'Chest',
+  back: 'Back',
+  shoulders: 'Shoulders',
+  biceps: 'Biceps',
+  triceps: 'Triceps',
+  forearms: 'Forearms',
+  quads: 'Quads',
+  hamstrings: 'Hamstrings',
+  glutes: 'Glutes',
+  calves: 'Calves',
+  core: 'Core',
+  neck: 'Neck',
+}
+
+const EXERCISE_TYPE_LABELS: Record<ExerciseType, string> = {
+  strength: 'Strength',
+  stretch: 'Stretch',
+  mobility: 'Mobility',
+}
+
+const selectClassName =
+  'h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm'
+
+function toggleMuscleGroup(current: MuscleGroup[], group: MuscleGroup, checked: boolean): MuscleGroup[] {
+  return checked ? [...current, group] : current.filter((g) => g !== group)
+}
+
+function LabeledSelect<T extends string>({
+  ariaLabel,
+  value,
+  options,
+  labels,
+  onChange,
+}: {
+  ariaLabel: string
+  value: T
+  options: readonly T[]
+  labels: Record<T, string>
+  onChange: (value: T) => void
+}) {
+  return (
+    <select
+      className={selectClassName}
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(event) => onChange(event.target.value as T)}
+    >
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {labels[option]}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function OtherMuscleGroupsFieldset({
+  idPrefix,
+  primaryMuscleGroup,
+  selected,
+  onChange,
+}: {
+  idPrefix: string
+  primaryMuscleGroup: MuscleGroup
+  selected: MuscleGroup[]
+  onChange: (next: MuscleGroup[]) => void
+}) {
+  return (
+    <fieldset className="flex flex-col gap-1">
+      <legend className="text-sm text-muted-foreground">Other Muscle Groups</legend>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {MUSCLE_GROUPS.filter((group) => group !== primaryMuscleGroup).map((group) => (
+          <div key={group} className="flex items-center gap-1.5">
+            <Checkbox
+              id={`${idPrefix}-other-${group}`}
+              checked={selected.includes(group)}
+              onCheckedChange={(checked) => onChange(toggleMuscleGroup(selected, group, checked === true))}
+            />
+            <label htmlFor={`${idPrefix}-other-${group}`} className="text-sm text-muted-foreground">
+              {MUSCLE_GROUP_LABELS[group]}
+            </label>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
 
 export function ExercisesPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
@@ -13,10 +102,19 @@ export function ExercisesPage() {
   const [newName, setNewName] = useState('')
   const [newIsUnilateral, setNewIsUnilateral] = useState(false)
   const [newIsTimed, setNewIsTimed] = useState(false)
+  const [newPrimaryMuscleGroup, setNewPrimaryMuscleGroup] = useState<MuscleGroup>(MUSCLE_GROUPS[0])
+  const [newType, setNewType] = useState<ExerciseType>('strength')
+  const [newOtherMuscleGroups, setNewOtherMuscleGroups] = useState<MuscleGroup[]>([])
+  // Tracks whether the Stretch/Mobility -> Timed convenience default has already
+  // fired once for this create-form session, so it doesn't re-clobber a manual uncheck.
+  const [newTimedAutoDefaulted, setNewTimedAutoDefaulted] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [editingIsUnilateral, setEditingIsUnilateral] = useState(false)
   const [editingIsTimed, setEditingIsTimed] = useState(false)
+  const [editingPrimaryMuscleGroup, setEditingPrimaryMuscleGroup] = useState<MuscleGroup>(MUSCLE_GROUPS[0])
+  const [editingType, setEditingType] = useState<ExerciseType>('strength')
+  const [editingOtherMuscleGroups, setEditingOtherMuscleGroups] = useState<MuscleGroup[]>([])
   const [search, setSearch] = useState('')
 
   const visibleExercises = filterExercisesByName(exercises, search)
@@ -33,13 +131,41 @@ export function ExercisesPage() {
     })()
   }, [])
 
+  function handleNewPrimaryMuscleGroupChange(group: MuscleGroup) {
+    setNewPrimaryMuscleGroup(group)
+    setNewOtherMuscleGroups((current) => current.filter((g) => g !== group))
+  }
+
+  function handleNewTypeChange(type: ExerciseType) {
+    setNewType(type)
+    if ((type === 'stretch' || type === 'mobility') && !newTimedAutoDefaulted) {
+      setNewIsTimed(true)
+      setNewTimedAutoDefaulted(true)
+    }
+  }
+
+  function handleEditingPrimaryMuscleGroupChange(group: MuscleGroup) {
+    setEditingPrimaryMuscleGroup(group)
+    setEditingOtherMuscleGroups((current) => current.filter((g) => g !== group))
+  }
+
   async function handleAdd(event: FormEvent) {
     event.preventDefault()
     if (!newName.trim()) return
-    await store.createExercise(newName, { isUnilateral: newIsUnilateral, isTimed: newIsTimed })
+    await store.createExercise(newName, {
+      isUnilateral: newIsUnilateral,
+      isTimed: newIsTimed,
+      primaryMuscleGroup: newPrimaryMuscleGroup,
+      type: newType,
+      otherMuscleGroups: newOtherMuscleGroups,
+    })
     setNewName('')
     setNewIsUnilateral(false)
     setNewIsTimed(false)
+    setNewPrimaryMuscleGroup(MUSCLE_GROUPS[0])
+    setNewType('strength')
+    setNewOtherMuscleGroups([])
+    setNewTimedAutoDefaulted(false)
     await refresh()
   }
 
@@ -48,6 +174,9 @@ export function ExercisesPage() {
     setEditingName(exercise.name)
     setEditingIsUnilateral(exercise.isUnilateral)
     setEditingIsTimed(exercise.isTimed)
+    setEditingPrimaryMuscleGroup(exercise.primaryMuscleGroup)
+    setEditingType(exercise.type)
+    setEditingOtherMuscleGroups(exercise.otherMuscleGroups)
   }
 
   async function handleRename(event: FormEvent) {
@@ -57,6 +186,9 @@ export function ExercisesPage() {
       name: editingName,
       isUnilateral: editingIsUnilateral,
       isTimed: editingIsTimed,
+      primaryMuscleGroup: editingPrimaryMuscleGroup,
+      type: editingType,
+      otherMuscleGroups: editingOtherMuscleGroups,
     })
     setEditingId(null)
     await refresh()
@@ -81,6 +213,26 @@ export function ExercisesPage() {
           />
           <Button type="submit">Add</Button>
         </div>
+        <LabeledSelect
+          ariaLabel="New exercise primary muscle group"
+          value={newPrimaryMuscleGroup}
+          options={MUSCLE_GROUPS}
+          labels={MUSCLE_GROUP_LABELS}
+          onChange={handleNewPrimaryMuscleGroupChange}
+        />
+        <LabeledSelect
+          ariaLabel="New exercise type"
+          value={newType}
+          options={EXERCISE_TYPES}
+          labels={EXERCISE_TYPE_LABELS}
+          onChange={handleNewTypeChange}
+        />
+        <OtherMuscleGroupsFieldset
+          idPrefix="new-exercise"
+          primaryMuscleGroup={newPrimaryMuscleGroup}
+          selected={newOtherMuscleGroups}
+          onChange={setNewOtherMuscleGroups}
+        />
         <div className="flex items-center gap-2">
           <Checkbox
             id="new-exercise-unilateral"
@@ -142,6 +294,26 @@ export function ExercisesPage() {
                       Cancel
                     </Button>
                   </div>
+                  <LabeledSelect
+                    ariaLabel={`${exercise.name} primary muscle group`}
+                    value={editingPrimaryMuscleGroup}
+                    options={MUSCLE_GROUPS}
+                    labels={MUSCLE_GROUP_LABELS}
+                    onChange={handleEditingPrimaryMuscleGroupChange}
+                  />
+                  <LabeledSelect
+                    ariaLabel={`${exercise.name} type`}
+                    value={editingType}
+                    options={EXERCISE_TYPES}
+                    labels={EXERCISE_TYPE_LABELS}
+                    onChange={setEditingType}
+                  />
+                  <OtherMuscleGroupsFieldset
+                    idPrefix={`edit-${exercise.id}`}
+                    primaryMuscleGroup={editingPrimaryMuscleGroup}
+                    selected={editingOtherMuscleGroups}
+                    onChange={setEditingOtherMuscleGroups}
+                  />
                   <div className="flex items-center gap-2">
                     <Checkbox
                       id={`edit-unilateral-${exercise.id}`}
@@ -173,6 +345,9 @@ export function ExercisesPage() {
                 <>
                   <span className="flex-1">
                     {exercise.name}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({MUSCLE_GROUP_LABELS[exercise.primaryMuscleGroup]} · {EXERCISE_TYPE_LABELS[exercise.type]})
+                    </span>
                     {exercise.isUnilateral && (
                       <span className="ml-2 text-xs text-muted-foreground">(unilateral)</span>
                     )}

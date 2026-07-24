@@ -3,17 +3,21 @@ import type { EntityTable } from './table'
 import { emptySet } from './types'
 import type {
   Exercise,
+  ExerciseType,
   ExportedData,
+  MuscleGroup,
   Session,
   SessionExerciseEntry,
   SessionSet,
   Workout,
 } from './types'
 
-export { emptySet } from './types'
+export { emptySet, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
 export type {
   Exercise,
+  ExerciseType,
   ExportedData,
+  MuscleGroup,
   Session,
   SessionExerciseEntry,
   SessionSet,
@@ -22,6 +26,14 @@ export type {
 export type { EntityTable } from './table'
 
 const TIMED_SEED_EXERCISE_NAMES = new Set(['Plank', 'Side Plank', 'Wall Sit'])
+
+/**
+ * Placeholder categorization for the bundled seed list until it's recategorized
+ * with real per-exercise data (tracked separately) — every seeded Exercise
+ * still gets a valid, non-undefined primaryMuscleGroup/type in the meantime.
+ */
+const PLACEHOLDER_SEED_MUSCLE_GROUP: MuscleGroup = 'core'
+const PLACEHOLDER_SEED_TYPE: ExerciseType = 'strength'
 
 export interface StoreDeps {
   exercises: EntityTable<Exercise>
@@ -88,6 +100,9 @@ export class Store {
       name,
       isUnilateral: false,
       isTimed: TIMED_SEED_EXERCISE_NAMES.has(name),
+      primaryMuscleGroup: PLACEHOLDER_SEED_MUSCLE_GROUP,
+      otherMuscleGroups: [],
+      type: PLACEHOLDER_SEED_TYPE,
     }))
     await this.exercises.bulkAdd(seeded)
   }
@@ -99,7 +114,13 @@ export class Store {
 
   async createExercise(
     name: string,
-    options: { isUnilateral?: boolean; isTimed?: boolean } = {}
+    options: {
+      isUnilateral?: boolean
+      isTimed?: boolean
+      primaryMuscleGroup: MuscleGroup
+      type: ExerciseType
+      otherMuscleGroups?: MuscleGroup[]
+    }
   ): Promise<Exercise> {
     const trimmed = name.trim()
     if (!trimmed) throw new Error('Exercise name cannot be empty')
@@ -108,6 +129,9 @@ export class Store {
       name: trimmed,
       isUnilateral: options.isUnilateral ?? false,
       isTimed: options.isTimed ?? false,
+      primaryMuscleGroup: options.primaryMuscleGroup,
+      otherMuscleGroups: options.otherMuscleGroups ?? [],
+      type: options.type,
     }
     await this.exercises.add(exercise)
     return exercise
@@ -115,7 +139,14 @@ export class Store {
 
   async updateExercise(
     id: string,
-    updates: { name?: string; isUnilateral?: boolean; isTimed?: boolean }
+    updates: {
+      name?: string
+      isUnilateral?: boolean
+      isTimed?: boolean
+      primaryMuscleGroup?: MuscleGroup
+      otherMuscleGroups?: MuscleGroup[]
+      type?: ExerciseType
+    }
   ): Promise<Exercise> {
     const existing = await this.exercises.get(id)
     if (!existing) throw new Error(`Exercise not found: ${id}`)
@@ -125,8 +156,19 @@ export class Store {
 
     const isUnilateral = updates.isUnilateral !== undefined ? updates.isUnilateral : existing.isUnilateral
     const isTimed = updates.isTimed !== undefined ? updates.isTimed : existing.isTimed
+    const primaryMuscleGroup = updates.primaryMuscleGroup ?? existing.primaryMuscleGroup
+    const otherMuscleGroups = updates.otherMuscleGroups ?? existing.otherMuscleGroups
+    const type = updates.type ?? existing.type
 
-    const updated: Exercise = { ...existing, name, isUnilateral, isTimed }
+    const updated: Exercise = {
+      ...existing,
+      name,
+      isUnilateral,
+      isTimed,
+      primaryMuscleGroup,
+      otherMuscleGroups,
+      type,
+    }
     await this.exercises.put(updated)
     return updated
   }

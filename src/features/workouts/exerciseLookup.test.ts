@@ -3,7 +3,15 @@ import { filterExercisesByName } from './exerciseLookup'
 import type { Exercise } from '@/store'
 
 function exercise(id: string, name: string): Exercise {
-  return { id, name, isUnilateral: false, isTimed: false }
+  return {
+    id,
+    name,
+    isUnilateral: false,
+    isTimed: false,
+    primaryMuscleGroup: 'core',
+    otherMuscleGroups: [],
+    type: 'strength',
+  }
 }
 
 describe('filterExercisesByName', () => {
