@@ -5,7 +5,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { SectionLabel } from '@/components/ui/section-label'
 import type { Exercise, Workout } from '@/store'
-import { exerciseNameById, filterExercisesByName } from './exerciseLookup'
+import {
+  exerciseNameById,
+  filterExercisesByName,
+  groupExercisesByMuscleGroup,
+  MUSCLE_GROUP_LABELS,
+} from './exerciseLookup'
 
 interface WorkoutFormProps {
   allExercises: Exercise[]
@@ -21,6 +26,7 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
 
   const selectedIds = new Set(exerciseIds)
   const visibleExercises = filterExercisesByName(allExercises, exerciseSearch)
+  const groupedExercises = groupExercisesByMuscleGroup(visibleExercises)
 
   function toggleExercise(id: string, checked: boolean) {
     setExerciseIds((current) =>
@@ -118,20 +124,27 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
             No exercises match "{exerciseSearch.trim()}".
           </p>
         ) : (
-          <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-            {visibleExercises.map((exercise) => (
-              <li key={exercise.id} className="flex items-center gap-2 px-2.5 py-1">
-                <Checkbox
-                  id={`exercise-${exercise.id}`}
-                  checked={selectedIds.has(exercise.id)}
-                  onCheckedChange={(checked) => toggleExercise(exercise.id, checked === true)}
-                />
-                <label htmlFor={`exercise-${exercise.id}`} className="flex-1 text-sm">
-                  {exercise.name}
-                </label>
-              </li>
+          <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">
+            {groupedExercises.map(({ muscleGroup, exercises: groupExercises }) => (
+              <div key={muscleGroup} className="flex flex-col gap-1">
+                <SectionLabel className="mb-0">{MUSCLE_GROUP_LABELS[muscleGroup]}</SectionLabel>
+                <ul className="flex flex-col gap-1">
+                  {groupExercises.map((exercise) => (
+                    <li key={exercise.id} className="flex items-center gap-2 px-2.5 py-1">
+                      <Checkbox
+                        id={`exercise-${exercise.id}`}
+                        checked={selectedIds.has(exercise.id)}
+                        onCheckedChange={(checked) => toggleExercise(exercise.id, checked === true)}
+                      />
+                      <label htmlFor={`exercise-${exercise.id}`} className="flex-1 text-sm">
+                        {exercise.name}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
 

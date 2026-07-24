@@ -6,28 +6,12 @@ import { PageHeading } from '@/components/ui/page-heading'
 import { SectionLabel } from '@/components/ui/section-label'
 import { store } from '@/store/instance'
 import { EXERCISE_TYPES, MUSCLE_GROUPS, type Exercise, type ExerciseType, type MuscleGroup } from '@/store'
-import { filterExercisesByName, groupExercisesByMuscleGroup } from '@/features/workouts/exerciseLookup'
-
-const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
-  chest: 'Chest',
-  back: 'Back',
-  shoulders: 'Shoulders',
-  biceps: 'Biceps',
-  triceps: 'Triceps',
-  forearms: 'Forearms',
-  quads: 'Quads',
-  hamstrings: 'Hamstrings',
-  glutes: 'Glutes',
-  calves: 'Calves',
-  core: 'Core',
-  neck: 'Neck',
-}
-
-const EXERCISE_TYPE_LABELS: Record<ExerciseType, string> = {
-  strength: 'Strength',
-  stretch: 'Stretch',
-  mobility: 'Mobility',
-}
+import {
+  EXERCISE_TYPE_LABELS,
+  filterExercisesByName,
+  groupExercisesByMuscleGroup,
+  MUSCLE_GROUP_LABELS,
+} from '@/features/workouts/exerciseLookup'
 
 const selectClassName =
   'h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm'

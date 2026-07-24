@@ -1,4 +1,25 @@
-import { MUSCLE_GROUPS, type Exercise, type MuscleGroup } from '@/store'
+import { MUSCLE_GROUPS, type Exercise, type ExerciseType, type MuscleGroup } from '@/store'
+
+export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
+  chest: 'Chest',
+  back: 'Back',
+  shoulders: 'Shoulders',
+  biceps: 'Biceps',
+  triceps: 'Triceps',
+  forearms: 'Forearms',
+  quads: 'Quads',
+  hamstrings: 'Hamstrings',
+  glutes: 'Glutes',
+  calves: 'Calves',
+  core: 'Core',
+  neck: 'Neck',
+}
+
+export const EXERCISE_TYPE_LABELS: Record<ExerciseType, string> = {
+  strength: 'Strength',
+  stretch: 'Stretch',
+  mobility: 'Mobility',
+}
 
 export function exerciseNameById(exercises: Exercise[], id: string): string {
   return exercises.find((exercise) => exercise.id === id)?.name ?? id
