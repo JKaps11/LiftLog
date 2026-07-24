@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
-import type { Exercise, MuscleGroup, Session, Workout } from './types'
+import type { Exercise, ExerciseType, MuscleGroup, Session, Workout } from './types'
 
 /** name -> seed entry, for backfilling legacy rows that were seeded before categorization existed. */
 const SEED_BY_NAME = new Map(EXERCISE_SEED.map((entry) => [entry.name, entry]))
@@ -44,7 +44,7 @@ export class WorkoutLogsDB extends Dexie {
             if (exercise.primaryMuscleGroup) return
             const seedEntry = SEED_BY_NAME.get(exercise.name)
             exercise.primaryMuscleGroup = (seedEntry?.primaryMuscleGroup as MuscleGroup) ?? 'core'
-            exercise.type = seedEntry?.type ?? 'strength'
+            exercise.type = (seedEntry?.type as ExerciseType) ?? 'strength'
             exercise.otherMuscleGroups = (seedEntry?.otherMuscleGroups as MuscleGroup[]) ?? []
             exercise.isUnilateral = seedEntry?.isUnilateral ?? false
             exercise.isTimed = seedEntry?.isTimed ?? false
@@ -79,7 +79,7 @@ export class WorkoutLogsDB extends Dexie {
             const seedEntry = SEED_BY_NAME.get(exercise.name)
             if (!seedEntry) return
             exercise.primaryMuscleGroup = seedEntry.primaryMuscleGroup as MuscleGroup
-            exercise.type = seedEntry.type
+            exercise.type = seedEntry.type as ExerciseType
             exercise.otherMuscleGroups = (seedEntry.otherMuscleGroups as MuscleGroup[]) ?? []
             exercise.isUnilateral = seedEntry.isUnilateral ?? false
             exercise.isTimed = seedEntry.isTimed ?? false
