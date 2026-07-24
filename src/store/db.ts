@@ -1,5 +1,9 @@
 import Dexie, { type Table } from 'dexie'
-import type { Exercise, Session, Workout } from './types'
+import EXERCISE_SEED from '@/data/exerciseSeed.json'
+import type { Exercise, MuscleGroup, Session, Workout } from './types'
+
+/** name -> seed entry, for backfilling legacy rows that were seeded before categorization existed. */
+const SEED_BY_NAME = new Map(EXERCISE_SEED.map((entry) => [entry.name, entry]))
 
 export class WorkoutLogsDB extends Dexie {
   exercises!: Table<Exercise, string>
@@ -16,11 +20,15 @@ export class WorkoutLogsDB extends Dexie {
     /**
      * ADR-0002 added primaryMuscleGroup/otherMuscleGroups/type/isUnilateral/isTimed
      * as required Exercise fields on the assumption there were no users yet to
-     * migrate — wrong in practice: exercises created before that ADR only have
-     * id/name. Without this, those legacy rows fail to match any muscle-group
-     * bucket and silently disappear from the grouped browse view. Backfill them
-     * with the same neutral defaults used elsewhere (core/strength); existing
-     * fields are left untouched.
+     * migrate — wrong in practice: the *bundled seed exercises* themselves were
+     * seeded before that ADR, so on-device rows only have id/name. Without this,
+     * those rows fail to match any muscle-group bucket and silently disappear
+     * from the grouped browse view. Backfill each by looking its name up in the
+     * current exerciseSeed.json (the real, per-exercise category the app already
+     * knows) rather than a single guessed default; only a genuinely custom
+     * exercise with no seed match falls back to the neutral core/strength
+     * default used elsewhere. Existing (already-categorized) fields are left
+     * untouched.
      */
     this.version(2)
       .stores({
@@ -33,11 +41,13 @@ export class WorkoutLogsDB extends Dexie {
           .table<Exercise, string>('exercises')
           .toCollection()
           .modify((exercise) => {
-            exercise.primaryMuscleGroup ??= 'core'
-            exercise.type ??= 'strength'
-            exercise.isUnilateral ??= false
-            exercise.isTimed ??= false
-            exercise.otherMuscleGroups ??= []
+            if (exercise.primaryMuscleGroup) return
+            const seedEntry = SEED_BY_NAME.get(exercise.name)
+            exercise.primaryMuscleGroup = (seedEntry?.primaryMuscleGroup as MuscleGroup) ?? 'core'
+            exercise.type = seedEntry?.type ?? 'strength'
+            exercise.otherMuscleGroups = (seedEntry?.otherMuscleGroups as MuscleGroup[]) ?? []
+            exercise.isUnilateral = seedEntry?.isUnilateral ?? false
+            exercise.isTimed = seedEntry?.isTimed ?? false
           })
       })
   }
