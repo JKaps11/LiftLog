@@ -236,12 +236,14 @@ function TypeFilterControl({
  * viewport as the user scrolls.
  */
 function BrowseControls({
+  className,
   search,
   onSearchChange,
   typeFilter,
   onTypeFilterChange,
   groups,
 }: {
+  className?: string
   search: string
   onSearchChange: (value: string) => void
   typeFilter: ExerciseTypeFilter
@@ -284,7 +286,7 @@ function BrowseControls({
     // actually stuck — padding inside the box instead would also push it down
     // in its normal, unstuck resting position, widening the gap below the
     // "+ New exercise" button too.
-    <div ref={headerRef} className="sticky top-3 z-10 flex flex-col gap-2 bg-background pb-2">
+    <div ref={headerRef} className={cn('sticky top-3 z-10 flex flex-col gap-2 bg-background pb-2', className)}>
       <Input
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
@@ -409,7 +411,16 @@ export function ExercisesPage() {
         </form>
       )}
 
+      {/*
+       * BrowseControls must stay a direct child of main (not nested in a
+       * smaller wrapper) — a sticky element can only stick within its own
+       * containing block's bounds, and main is the one ancestor tall enough
+       * (it also holds the whole exercise list) for that to matter. -mt-2
+       * cancels half of main's gap-4 above it, tightening it visually against
+       * the "+ New exercise" button, without shrinking that containing block.
+       */}
       <BrowseControls
+        className="-mt-2"
         search={search}
         onSearchChange={setSearch}
         typeFilter={typeFilter}
