@@ -18,6 +18,37 @@ interface SessionExerciseCardProps {
   onDeleteSet: (exerciseId: string, setIndex: number) => void
 }
 
+/** A single numeric Set field (weight, reps, or duration) with its unit label. */
+function SetValueField({
+  inputMode,
+  value,
+  onChange,
+  ariaLabel,
+  unit,
+}: {
+  inputMode: 'decimal' | 'numeric'
+  value: number | undefined
+  onChange: (value: number) => void
+  ariaLabel: string
+  unit: string
+}) {
+  return (
+    <>
+      <Input
+        type="number"
+        inputMode={inputMode}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        aria-label={ariaLabel}
+        className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
+      />
+      <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+        {unit}
+      </span>
+    </>
+  )
+}
+
 /** The Set list + editing controls for a single Exercise within a Session — shared between logging an active Session and editing a past one. */
 export function SessionExerciseCard({
   entry,
@@ -60,55 +91,30 @@ export function SessionExerciseCard({
                     )}
                   </span>
                   {set.durationSeconds !== undefined ? (
-                    <>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        value={set.durationSeconds}
-                        onChange={(event) =>
-                          onSetChange(
-                            entry.exerciseId,
-                            index,
-                            'durationSeconds',
-                            Number(event.target.value)
-                          )
-                        }
-                        aria-label={`${label} duration (seconds) for ${displayName}`}
-                        className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
-                      />
-                      <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                        sec
-                      </span>
-                    </>
+                    <SetValueField
+                      inputMode="numeric"
+                      value={set.durationSeconds}
+                      onChange={(value) => onSetChange(entry.exerciseId, index, 'durationSeconds', value)}
+                      ariaLabel={`${label} duration (seconds) for ${displayName}`}
+                      unit="sec"
+                    />
                   ) : (
                     <>
-                      <Input
-                        type="number"
+                      <SetValueField
                         inputMode="decimal"
                         value={set.weight}
-                        onChange={(event) =>
-                          onSetChange(entry.exerciseId, index, 'weight', Number(event.target.value))
-                        }
-                        aria-label={`${label} weight (lbs) for ${displayName}`}
-                        className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
+                        onChange={(value) => onSetChange(entry.exerciseId, index, 'weight', value)}
+                        ariaLabel={`${label} weight (lbs) for ${displayName}`}
+                        unit="lbs"
                       />
-                      <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                        lbs
-                      </span>
                       <span className="text-muted-foreground">×</span>
-                      <Input
-                        type="number"
+                      <SetValueField
                         inputMode="numeric"
                         value={set.reps}
-                        onChange={(event) =>
-                          onSetChange(entry.exerciseId, index, 'reps', Number(event.target.value))
-                        }
-                        aria-label={`${label} reps for ${displayName}`}
-                        className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
+                        onChange={(value) => onSetChange(entry.exerciseId, index, 'reps', value)}
+                        ariaLabel={`${label} reps for ${displayName}`}
+                        unit="reps"
                       />
-                      <span className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                        reps
-                      </span>
                     </>
                   )}
                   <Button

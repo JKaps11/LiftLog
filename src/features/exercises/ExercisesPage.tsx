@@ -36,7 +36,7 @@ export function ExercisesPage() {
   async function handleAdd(event: FormEvent) {
     event.preventDefault()
     if (!newName.trim()) return
-    await store.createExercise(newName, newIsUnilateral, newIsTimed)
+    await store.createExercise(newName, { isUnilateral: newIsUnilateral, isTimed: newIsTimed })
     setNewName('')
     setNewIsUnilateral(false)
     setNewIsTimed(false)

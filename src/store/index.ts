@@ -97,10 +97,18 @@ export class Store {
     return all.sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  async createExercise(name: string, isUnilateral = false, isTimed = false): Promise<Exercise> {
+  async createExercise(
+    name: string,
+    options: { isUnilateral?: boolean; isTimed?: boolean } = {}
+  ): Promise<Exercise> {
     const trimmed = name.trim()
     if (!trimmed) throw new Error('Exercise name cannot be empty')
-    const exercise: Exercise = { id: crypto.randomUUID(), name: trimmed, isUnilateral, isTimed }
+    const exercise: Exercise = {
+      id: crypto.randomUUID(),
+      name: trimmed,
+      isUnilateral: options.isUnilateral ?? false,
+      isTimed: options.isTimed ?? false,
+    }
     await this.exercises.add(exercise)
     return exercise
   }

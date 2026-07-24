@@ -132,7 +132,7 @@ describe('Store', () => {
     })
 
     it('persists isUnilateral when passed', async () => {
-      const exercise = await store.createExercise('Single Arm Row', true)
+      const exercise = await store.createExercise('Single Arm Row', { isUnilateral: true })
       expect(exercise.isUnilateral).toBe(true)
       expect(await store.listExercises()).toEqual([exercise])
     })
@@ -145,7 +145,7 @@ describe('Store', () => {
     })
 
     it('persists isTimed when passed', async () => {
-      const exercise = await store.createExercise('Plank', false, true)
+      const exercise = await store.createExercise('Plank', { isTimed: true })
       expect(exercise.isTimed).toBe(true)
       expect(await store.listExercises()).toEqual([exercise])
     })
@@ -183,7 +183,7 @@ describe('Store', () => {
     })
 
     it('toggles isUnilateral on an existing exercise, true to false', async () => {
-      const exercise = await store.createExercise('Single Arm Row', true)
+      const exercise = await store.createExercise('Single Arm Row', { isUnilateral: true })
 
       const updated = await store.updateExercise(exercise.id, { isUnilateral: false })
 
@@ -191,7 +191,7 @@ describe('Store', () => {
     })
 
     it('leaves fields unspecified in the update untouched', async () => {
-      const exercise = await store.createExercise('Single Arm Row', true)
+      const exercise = await store.createExercise('Single Arm Row', { isUnilateral: true })
 
       const updated = await store.updateExercise(exercise.id, { name: 'Single-Arm Row' })
 
@@ -208,7 +208,7 @@ describe('Store', () => {
     })
 
     it('toggles isTimed on an existing exercise, true to false', async () => {
-      const exercise = await store.createExercise('Plank', false, true)
+      const exercise = await store.createExercise('Plank', { isTimed: true })
 
       const updated = await store.updateExercise(exercise.id, { isTimed: false })
 
@@ -216,7 +216,7 @@ describe('Store', () => {
     })
 
     it('leaves isTimed untouched when unspecified in the update', async () => {
-      const exercise = await store.createExercise('Plank', false, true)
+      const exercise = await store.createExercise('Plank', { isTimed: true })
 
       const updated = await store.updateExercise(exercise.id, { name: 'Plank Hold' })
 
@@ -448,7 +448,7 @@ describe('Store', () => {
     })
 
     it('appends a left+right pair for a unilateral Exercise', async () => {
-      const row = await store.createExercise('Single Arm Row', true)
+      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
 
@@ -462,7 +462,7 @@ describe('Store', () => {
     })
 
     it('does not add a side for a non-unilateral Exercise', async () => {
-      const bench = await store.createExercise('Bench Press', false)
+      const bench = await store.createExercise('Bench Press', { isUnilateral: false })
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
 
@@ -472,7 +472,7 @@ describe('Store', () => {
     })
 
     it('appends a duration-only Set with no explicit set argument, for a timed Exercise', async () => {
-      const plank = await store.createExercise('Plank', false, true)
+      const plank = await store.createExercise('Plank', { isTimed: true })
       const workout = await store.createWorkout('Core', [plank.id])
       const session = await store.startSession(workout.id)
 
@@ -482,7 +482,7 @@ describe('Store', () => {
     })
 
     it('appends a left+right pair of duration-only Sets for a timed and unilateral Exercise', async () => {
-      const stretch = await store.createExercise('Single Leg Hamstring Stretch', true, true)
+      const stretch = await store.createExercise('Single Leg Hamstring Stretch', { isUnilateral: true, isTimed: true })
       const workout = await store.createWorkout('Mobility', [stretch.id])
       const session = await store.startSession(workout.id)
 
@@ -681,7 +681,7 @@ describe('Store', () => {
     })
 
     it('deleting the left Set of a unilateral pair removes both', async () => {
-      const row = await store.createExercise('Single Arm Row', true)
+      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -692,7 +692,7 @@ describe('Store', () => {
     })
 
     it('deleting the right Set of a unilateral pair removes both', async () => {
-      const row = await store.createExercise('Single Arm Row', true)
+      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -703,7 +703,7 @@ describe('Store', () => {
     })
 
     it('deleting either Set of a timed+unilateral pair removes both', async () => {
-      const stretch = await store.createExercise('Single Leg Hamstring Stretch', true, true)
+      const stretch = await store.createExercise('Single Leg Hamstring Stretch', { isUnilateral: true, isTimed: true })
       const workout = await store.createWorkout('Mobility', [stretch.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, stretch.id)
@@ -714,7 +714,7 @@ describe('Store', () => {
     })
 
     it('deleting one pair leaves other Sets/pairs intact and in order', async () => {
-      const row = await store.createExercise('Single Arm Row', true)
+      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -732,7 +732,7 @@ describe('Store', () => {
 
   describe('unilateral Exercises do not retroactively reinterpret past Sets', () => {
     it('leaves a Set logged before the Exercise was unilateral unmodified after the flag is toggled on', async () => {
-      const row = await store.createExercise('Single Arm Row', false)
+      const row = await store.createExercise('Single Arm Row', { isUnilateral: false })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -745,7 +745,7 @@ describe('Store', () => {
     })
 
     it('leaves paired Sets unmodified after the Exercise is later un-flagged as unilateral', async () => {
-      const row = await store.createExercise('Single Arm Row', true)
+      const row = await store.createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
@@ -764,7 +764,7 @@ describe('Store', () => {
 
   describe('timed Exercises do not retroactively reinterpret past Sets', () => {
     it('leaves a weight/reps Set unmodified after its Exercise is later marked timed', async () => {
-      const plank = await store.createExercise('Plank', false, false)
+      const plank = await store.createExercise('Plank', { isTimed: false })
       const workout = await store.createWorkout('Core', [plank.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, plank.id, { weight: 0, reps: 30 })
@@ -777,7 +777,7 @@ describe('Store', () => {
     })
 
     it('leaves a duration Set unmodified after its Exercise is later un-flagged as timed', async () => {
-      const plank = await store.createExercise('Plank', false, true)
+      const plank = await store.createExercise('Plank', { isTimed: true })
       const workout = await store.createWorkout('Core', [plank.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, plank.id, { durationSeconds: 45 })
