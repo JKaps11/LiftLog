@@ -201,7 +201,11 @@ function TypeFilterControl({
   onChange: (next: ExerciseTypeFilter) => void
 }) {
   return (
-    <div role="group" aria-label="Filter by type" className="flex rounded-lg border border-border">
+    <div
+      role="group"
+      aria-label="Filter by type"
+      className="flex overflow-hidden rounded-lg border border-border"
+    >
       {TYPE_FILTERS.map((type, index) => (
         <button
           key={type}
@@ -222,22 +226,35 @@ function TypeFilterControl({
 }
 
 /**
- * Sticky jump-to-group strip (Apple HIG's alphabet-index pattern, generalized
- * to muscle-group category) so a long grouped list is reachable in one tap
+ * Sticky header block: search + type filter + jump-to-group strip (Apple
+ * HIG's alphabet-index pattern, generalized to muscle-group category) all
+ * stick together as one unit so a long grouped list is reachable in one tap
  * instead of scroll-only. Highlights the group nearest the top of the
  * viewport as the user scrolls.
  */
-function JumpRail({ groups }: { groups: MuscleGroup[] }) {
+function BrowseControls({
+  search,
+  onSearchChange,
+  typeFilter,
+  onTypeFilterChange,
+  groups,
+}: {
+  search: string
+  onSearchChange: (value: string) => void
+  typeFilter: ExerciseTypeFilter
+  onTypeFilterChange: (next: ExerciseTypeFilter) => void
+  groups: MuscleGroup[]
+}) {
   const [active, setActive] = useState<MuscleGroup | null>(null)
-  const railRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function updateActive() {
-      const railBottom = railRef.current?.getBoundingClientRect().bottom ?? 0
+      const headerBottom = headerRef.current?.getBoundingClientRect().bottom ?? 0
       let current: MuscleGroup | null = null
       for (const group of groups) {
         const section = document.getElementById(`exercise-group-${group}`)
-        if (section && section.getBoundingClientRect().top - railBottom < 40) current = group
+        if (section && section.getBoundingClientRect().top - headerBottom < 40) current = group
       }
       setActive(current)
     }
@@ -246,38 +263,45 @@ function JumpRail({ groups }: { groups: MuscleGroup[] }) {
     return () => window.removeEventListener('scroll', updateActive)
   }, [groups])
 
-  if (groups.length === 0) return null
+  function jumpTo(group: MuscleGroup) {
+    const target = document.getElementById(`exercise-group-${group}`)
+    if (!target) return
+    // scrollIntoView's block:'start' aligns the section header with the
+    // viewport top, but this whole block is sticky and then sits on top of
+    // that same position — offset by its own rendered height so it doesn't
+    // cover the header it just scrolled to.
+    const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
+    const targetTop = target.getBoundingClientRect().top + window.scrollY - headerHeight
+    window.scrollTo({ top: targetTop, behavior: 'smooth' })
+  }
 
   return (
-    <nav
-      ref={railRef}
-      aria-label="Jump to muscle group"
-      className="sticky top-0 z-10 flex gap-1.5 overflow-x-auto bg-gradient-to-b from-background from-75% to-transparent py-1 [scrollbar-width:none]"
-    >
-      {groups.map((group) => (
-        <button
-          key={group}
-          type="button"
-          onClick={() => {
-            const target = document.getElementById(`exercise-group-${group}`)
-            if (!target) return
-            // scrollIntoView's block:'start' aligns the section header with the
-            // viewport top, but the rail is sticky and then sits on top of that
-            // same position — offset by the rail's own height so it doesn't
-            // cover the header it just scrolled to.
-            const railHeight = railRef.current?.getBoundingClientRect().height ?? 0
-            const targetTop = target.getBoundingClientRect().top + window.scrollY - railHeight
-            window.scrollTo({ top: targetTop, behavior: 'smooth' })
-          }}
-          className={cn(
-            'shrink-0 rounded-full border border-border bg-muted px-2.5 py-1 text-xs whitespace-nowrap text-muted-foreground',
-            active === group && 'border-accent-foreground bg-accent-foreground text-background'
-          )}
-        >
-          {MUSCLE_GROUP_LABELS[group]}
-        </button>
-      ))}
-    </nav>
+    <div ref={headerRef} className="sticky top-0 z-10 flex flex-col gap-2 bg-background pb-2">
+      <Input
+        value={search}
+        onChange={(event) => onSearchChange(event.target.value)}
+        placeholder="Search exercises"
+        aria-label="Search exercises"
+      />
+      <TypeFilterControl value={typeFilter} onChange={onTypeFilterChange} />
+      {groups.length > 0 && (
+        <nav aria-label="Jump to muscle group" className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
+          {groups.map((group) => (
+            <button
+              key={group}
+              type="button"
+              onClick={() => jumpTo(group)}
+              className={cn(
+                'shrink-0 rounded-full border border-border bg-muted px-2.5 py-1 text-xs whitespace-nowrap text-muted-foreground',
+                active === group && 'border-accent-foreground bg-accent-foreground text-background'
+              )}
+            >
+              {MUSCLE_GROUP_LABELS[group]}
+            </button>
+          ))}
+        </nav>
+      )}
+    </div>
   )
 }
 
@@ -377,16 +401,13 @@ export function ExercisesPage() {
         </form>
       )}
 
-      <Input
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Search exercises"
-        aria-label="Search exercises"
+      <BrowseControls
+        search={search}
+        onSearchChange={setSearch}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
+        groups={groups.map((g) => g.muscleGroup)}
       />
-
-      <TypeFilterControl value={typeFilter} onChange={setTypeFilter} />
-
-      <JumpRail groups={groups.map((g) => g.muscleGroup)} />
 
       {isLoading ? (
         <p className="text-muted-foreground">Loading exercises…</p>
