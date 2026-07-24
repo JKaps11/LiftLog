@@ -1,6 +1,6 @@
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
 import type { EntityTable } from './table'
-import { emptySet } from './types'
+import { emptySet, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
 import type {
   Exercise,
   ExerciseType,
@@ -11,6 +11,21 @@ import type {
   SessionSet,
   Workout,
 } from './types'
+
+/** Fails fast on a typo'd seed entry rather than silently persisting an invalid Exercise. */
+function parseMuscleGroup(value: string): MuscleGroup {
+  if (!MUSCLE_GROUPS.includes(value as MuscleGroup)) {
+    throw new Error(`Invalid seed primaryMuscleGroup: ${value}`)
+  }
+  return value as MuscleGroup
+}
+
+function parseExerciseType(value: string): ExerciseType {
+  if (!EXERCISE_TYPES.includes(value as ExerciseType)) {
+    throw new Error(`Invalid seed type: ${value}`)
+  }
+  return value as ExerciseType
+}
 
 export { emptySet, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
 export type {
@@ -24,16 +39,6 @@ export type {
   Workout,
 } from './types'
 export type { EntityTable } from './table'
-
-const TIMED_SEED_EXERCISE_NAMES = new Set(['Plank', 'Side Plank', 'Wall Sit'])
-
-/**
- * Placeholder categorization for the bundled seed list until it's recategorized
- * with real per-exercise data (tracked separately) — every seeded Exercise
- * still gets a valid, non-undefined primaryMuscleGroup/type in the meantime.
- */
-const PLACEHOLDER_SEED_MUSCLE_GROUP: MuscleGroup = 'core'
-const PLACEHOLDER_SEED_TYPE: ExerciseType = 'strength'
 
 export interface StoreDeps {
   exercises: EntityTable<Exercise>
@@ -95,14 +100,14 @@ export class Store {
   private async performSeedIfEmpty(): Promise<void> {
     const count = await this.exercises.count()
     if (count > 0) return
-    const seeded: Exercise[] = EXERCISE_SEED.map((name) => ({
+    const seeded: Exercise[] = EXERCISE_SEED.map((entry) => ({
       id: crypto.randomUUID(),
-      name,
-      isUnilateral: false,
-      isTimed: TIMED_SEED_EXERCISE_NAMES.has(name),
-      primaryMuscleGroup: PLACEHOLDER_SEED_MUSCLE_GROUP,
-      otherMuscleGroups: [],
-      type: PLACEHOLDER_SEED_TYPE,
+      name: entry.name,
+      isUnilateral: entry.isUnilateral ?? false,
+      isTimed: entry.isTimed ?? false,
+      primaryMuscleGroup: parseMuscleGroup(entry.primaryMuscleGroup),
+      otherMuscleGroups: (entry.otherMuscleGroups ?? []).map(parseMuscleGroup),
+      type: parseExerciseType(entry.type),
     }))
     await this.exercises.bulkAdd(seeded)
   }

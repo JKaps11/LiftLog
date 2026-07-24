@@ -3,6 +3,8 @@ import {
   Store,
   resolveExerciseDisplayName,
   emptySet,
+  EXERCISE_TYPES,
+  MUSCLE_GROUPS,
   type Exercise,
   type Session,
   type Workout,
@@ -79,7 +81,7 @@ describe('Store', () => {
 
       const all = await store.listExercises()
       expect(all).toHaveLength(EXERCISE_SEED.length)
-      expect(all.map((e) => e.name).sort()).toEqual([...EXERCISE_SEED].sort())
+      expect(all.map((e) => e.name).sort()).toEqual(EXERCISE_SEED.map((e) => e.name).sort())
     })
 
     it('does not duplicate when called concurrently (e.g. StrictMode double-invoked effects)', async () => {
@@ -100,12 +102,14 @@ describe('Store', () => {
       expect(all.filter((e) => e.id === custom.id)).toHaveLength(1)
     })
 
-    it('marks Plank, Side Plank, and Wall Sit as timed, and every other seeded exercise as not', async () => {
+    it('marks each seeded exercise as timed/not-timed per its seed data', async () => {
       await store.seedExercisesIfEmpty()
 
       const all = await store.listExercises()
       const timedNames = all.filter((e) => e.isTimed).map((e) => e.name).sort()
-      expect(timedNames).toEqual(['Plank', 'Side Plank', 'Wall Sit'])
+      const expectedTimedNames = EXERCISE_SEED.filter((e) => e.isTimed).map((e) => e.name).sort()
+      expect(timedNames).toEqual(expectedTimedNames)
+      expect(timedNames).toEqual(expect.arrayContaining(['Plank', 'Side Plank', 'Wall Sit']))
     })
 
     it('does not re-seed on a later app launch (a fresh Store over the same table)', async () => {
@@ -118,14 +122,41 @@ describe('Store', () => {
       expect(all).toHaveLength(EXERCISE_SEED.length)
     })
 
-    it('gives every seeded exercise a populated primaryMuscleGroup and type', async () => {
+    it('gives every seeded exercise a populated primaryMuscleGroup and type, matching its seed data', async () => {
       await store.seedExercisesIfEmpty()
 
       const all = await store.listExercises()
+      expect(all).toHaveLength(EXERCISE_SEED.length)
       for (const exercise of all) {
         expect(exercise.primaryMuscleGroup).toBeTruthy()
         expect(exercise.type).toBeTruthy()
-        expect(exercise.otherMuscleGroups).toEqual([])
+
+        const seedEntry = EXERCISE_SEED.find((e) => e.name === exercise.name)
+        expect(seedEntry).toBeTruthy()
+        expect(exercise.primaryMuscleGroup).toBe(seedEntry?.primaryMuscleGroup)
+        expect(exercise.type).toBe(seedEntry?.type)
+        expect(exercise.otherMuscleGroups).toEqual(seedEntry?.otherMuscleGroups ?? [])
+      }
+    })
+
+    it('gives every seed JSON entry a primaryMuscleGroup/type/otherMuscleGroups that are real MuscleGroup/ExerciseType values (catches typos in exerciseSeed.json)', () => {
+      for (const entry of EXERCISE_SEED) {
+        expect(MUSCLE_GROUPS).toContain(entry.primaryMuscleGroup)
+        expect(EXERCISE_TYPES).toContain(entry.type)
+        for (const group of entry.otherMuscleGroups ?? []) {
+          expect(MUSCLE_GROUPS).toContain(group)
+        }
+      }
+    })
+
+    it('covers every muscle group with at least one Stretch and one Mobility seed exercise', async () => {
+      await store.seedExercisesIfEmpty()
+
+      const all = await store.listExercises()
+      for (const muscleGroup of MUSCLE_GROUPS) {
+        const forGroup = all.filter((e) => e.primaryMuscleGroup === muscleGroup)
+        expect(forGroup.some((e) => e.type === 'stretch')).toBe(true)
+        expect(forGroup.some((e) => e.type === 'mobility')).toBe(true)
       }
     })
   })
