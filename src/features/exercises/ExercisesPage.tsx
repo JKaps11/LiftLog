@@ -276,7 +276,7 @@ function BrowseControls({
   }
 
   return (
-    <div ref={headerRef} className="sticky top-0 z-10 flex flex-col gap-2 bg-background pb-2">
+    <div ref={headerRef} className="sticky top-0 z-10 flex flex-col gap-2 bg-background pt-3 pb-2">
       <Input
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
