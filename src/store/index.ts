@@ -21,6 +21,8 @@ export type {
 } from './types'
 export type { EntityTable } from './table'
 
+const TIMED_SEED_EXERCISE_NAMES = new Set(['Plank', 'Side Plank', 'Wall Sit'])
+
 export interface StoreDeps {
   exercises: EntityTable<Exercise>
   workouts: EntityTable<Workout>
@@ -85,6 +87,7 @@ export class Store {
       id: crypto.randomUUID(),
       name,
       isUnilateral: false,
+      isTimed: TIMED_SEED_EXERCISE_NAMES.has(name),
     }))
     await this.exercises.bulkAdd(seeded)
   }
@@ -94,17 +97,17 @@ export class Store {
     return all.sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  async createExercise(name: string, isUnilateral = false): Promise<Exercise> {
+  async createExercise(name: string, isUnilateral = false, isTimed = false): Promise<Exercise> {
     const trimmed = name.trim()
     if (!trimmed) throw new Error('Exercise name cannot be empty')
-    const exercise: Exercise = { id: crypto.randomUUID(), name: trimmed, isUnilateral }
+    const exercise: Exercise = { id: crypto.randomUUID(), name: trimmed, isUnilateral, isTimed }
     await this.exercises.add(exercise)
     return exercise
   }
 
   async updateExercise(
     id: string,
-    updates: { name?: string; isUnilateral?: boolean }
+    updates: { name?: string; isUnilateral?: boolean; isTimed?: boolean }
   ): Promise<Exercise> {
     const existing = await this.exercises.get(id)
     if (!existing) throw new Error(`Exercise not found: ${id}`)
@@ -113,8 +116,9 @@ export class Store {
     if (!name) throw new Error('Exercise name cannot be empty')
 
     const isUnilateral = updates.isUnilateral !== undefined ? updates.isUnilateral : existing.isUnilateral
+    const isTimed = updates.isTimed !== undefined ? updates.isTimed : existing.isTimed
 
-    const updated: Exercise = { ...existing, name, isUnilateral }
+    const updated: Exercise = { ...existing, name, isUnilateral, isTimed }
     await this.exercises.put(updated)
     return updated
   }
@@ -216,21 +220,26 @@ export class Store {
 
   /**
    * Against a unilateral Exercise (checked live by exerciseId), appends a
-   * left+right pair of Sets in one call instead of a single Set.
+   * left+right pair of Sets in one call instead of a single Set. When `set` is
+   * omitted (the "Add set" path), the base Set is constructed live from the
+   * Exercise's current isTimed flag — { durationSeconds: 0 } for a timed
+   * Exercise, { weight: 0, reps: 0 } otherwise — rather than the caller
+   * needing to know which shape to build.
    */
-  async logSet(sessionId: string, exerciseId: string, set: SessionSet): Promise<Session> {
+  async logSet(sessionId: string, exerciseId: string, set?: SessionSet): Promise<Session> {
     const session = await this.requireSession(sessionId)
     if (!session.exercises.some((entry) => entry.exerciseId === exerciseId)) {
       throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
     }
 
     const exercise = await this.exercises.get(exerciseId)
+    const base: SessionSet = set ?? (exercise?.isTimed ? { durationSeconds: 0 } : { weight: 0, reps: 0 })
     const newSets: SessionSet[] = exercise?.isUnilateral
       ? [
-          { ...set, side: 'left' },
-          { ...set, side: 'right' },
+          { ...base, side: 'left' },
+          { ...base, side: 'right' },
         ]
-      : [{ ...set }]
+      : [{ ...base }]
 
     const exercises = session.exercises.map((entry) =>
       entry.exerciseId === exerciseId ? { ...entry, sets: [...entry.sets, ...newSets] } : entry

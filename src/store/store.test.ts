@@ -87,6 +87,14 @@ describe('Store', () => {
       expect(all.filter((e) => e.id === custom.id)).toHaveLength(1)
     })
 
+    it('marks Plank, Side Plank, and Wall Sit as timed, and every other seeded exercise as not', async () => {
+      await store.seedExercisesIfEmpty()
+
+      const all = await store.listExercises()
+      const timedNames = all.filter((e) => e.isTimed).map((e) => e.name).sort()
+      expect(timedNames).toEqual(['Plank', 'Side Plank', 'Wall Sit'])
+    })
+
     it('does not re-seed on a later app launch (a fresh Store over the same table)', async () => {
       await store.seedExercisesIfEmpty()
 
@@ -126,6 +134,19 @@ describe('Store', () => {
     it('persists isUnilateral when passed', async () => {
       const exercise = await store.createExercise('Single Arm Row', true)
       expect(exercise.isUnilateral).toBe(true)
+      expect(await store.listExercises()).toEqual([exercise])
+    })
+  })
+
+  describe('createExercise (isTimed)', () => {
+    it('defaults isTimed to false when omitted', async () => {
+      const exercise = await store.createExercise('Plank')
+      expect(exercise.isTimed).toBe(false)
+    })
+
+    it('persists isTimed when passed', async () => {
+      const exercise = await store.createExercise('Plank', false, true)
+      expect(exercise.isTimed).toBe(true)
       expect(await store.listExercises()).toEqual([exercise])
     })
   })
@@ -175,6 +196,31 @@ describe('Store', () => {
       const updated = await store.updateExercise(exercise.id, { name: 'Single-Arm Row' })
 
       expect(updated.isUnilateral).toBe(true)
+    })
+
+    it('toggles isTimed on an existing exercise, false to true', async () => {
+      const exercise = await store.createExercise('Plank')
+
+      const updated = await store.updateExercise(exercise.id, { isTimed: true })
+
+      expect(updated.isTimed).toBe(true)
+      expect(updated.name).toBe('Plank')
+    })
+
+    it('toggles isTimed on an existing exercise, true to false', async () => {
+      const exercise = await store.createExercise('Plank', false, true)
+
+      const updated = await store.updateExercise(exercise.id, { isTimed: false })
+
+      expect(updated.isTimed).toBe(false)
+    })
+
+    it('leaves isTimed untouched when unspecified in the update', async () => {
+      const exercise = await store.createExercise('Plank', false, true)
+
+      const updated = await store.updateExercise(exercise.id, { name: 'Plank Hold' })
+
+      expect(updated.isTimed).toBe(true)
     })
   })
 
@@ -424,6 +470,40 @@ describe('Store', () => {
 
       expect(updated.exercises[0].sets.at(-1)).toEqual({ weight: 135, reps: 8 })
     })
+
+    it('appends a duration-only Set with no explicit set argument, for a timed Exercise', async () => {
+      const plank = await store.createExercise('Plank', false, true)
+      const workout = await store.createWorkout('Core', [plank.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, plank.id)
+
+      expect(updated.exercises[0].sets.at(-1)).toEqual({ durationSeconds: 0 })
+    })
+
+    it('appends a left+right pair of duration-only Sets for a timed and unilateral Exercise', async () => {
+      const stretch = await store.createExercise('Single Leg Hamstring Stretch', true, true)
+      const workout = await store.createWorkout('Mobility', [stretch.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, stretch.id)
+
+      expect(updated.exercises[0].sets).toEqual([
+        emptySet(),
+        { durationSeconds: 0, side: 'left' },
+        { durationSeconds: 0, side: 'right' },
+      ])
+    })
+
+    it('appends weight/reps Set with no explicit set argument, for a non-timed Exercise', async () => {
+      const bench = await store.createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, bench.id)
+
+      expect(updated.exercises[0].sets.at(-1)).toEqual({ weight: 0, reps: 0 })
+    })
   })
 
   describe('updateSet', () => {
@@ -622,6 +702,17 @@ describe('Store', () => {
       expect(updated.exercises[0].sets).toEqual([emptySet()])
     })
 
+    it('deleting either Set of a timed+unilateral pair removes both', async () => {
+      const stretch = await store.createExercise('Single Leg Hamstring Stretch', true, true)
+      const workout = await store.createWorkout('Mobility', [stretch.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, stretch.id)
+      // sets: [emptySet(), left, right] -> left is index 1
+      const updated = await store.deleteSet(logged.id, stretch.id, 1)
+
+      expect(updated.exercises[0].sets).toEqual([emptySet()])
+    })
+
     it('deleting one pair leaves other Sets/pairs intact and in order', async () => {
       const row = await store.createExercise('Single Arm Row', true)
       const workout = await store.createWorkout('Pull Day', [row.id])
@@ -668,6 +759,34 @@ describe('Store', () => {
         { weight: 40, reps: 10, side: 'left' },
         { weight: 40, reps: 10, side: 'right' },
       ])
+    })
+  })
+
+  describe('timed Exercises do not retroactively reinterpret past Sets', () => {
+    it('leaves a weight/reps Set unmodified after its Exercise is later marked timed', async () => {
+      const plank = await store.createExercise('Plank', false, false)
+      const workout = await store.createWorkout('Core', [plank.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, plank.id, { weight: 0, reps: 30 })
+
+      await store.updateExercise(plank.id, { isTimed: true })
+
+      const reloaded = await store.getLastSessionForWorkout(workout.id)
+      expect(reloaded?.id).toBe(logged.id)
+      expect(reloaded?.exercises[0].sets).toEqual([emptySet(), { weight: 0, reps: 30 }])
+    })
+
+    it('leaves a duration Set unmodified after its Exercise is later un-flagged as timed', async () => {
+      const plank = await store.createExercise('Plank', false, true)
+      const workout = await store.createWorkout('Core', [plank.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, plank.id, { durationSeconds: 45 })
+
+      await store.updateExercise(plank.id, { isTimed: false })
+
+      const reloaded = await store.getLastSessionForWorkout(workout.id)
+      expect(reloaded?.id).toBe(logged.id)
+      expect(reloaded?.exercises[0].sets).toEqual([emptySet(), { durationSeconds: 45 }])
     })
   })
 

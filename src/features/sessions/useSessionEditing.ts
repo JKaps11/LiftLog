@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { store } from '@/store/instance'
-import { emptySet } from '@/store'
 import type { Session } from '@/store'
 
 /** Set/notes editing behavior shared between logging an active Session and editing a past one. */
@@ -8,14 +7,14 @@ export function useSessionEditing(session: Session, onChange: (session: Session)
   const [notes, setNotes] = useState(session.notes)
 
   async function handleAddSet(exerciseId: string) {
-    const updated = await store.logSet(session.id, exerciseId, emptySet())
+    const updated = await store.logSet(session.id, exerciseId)
     onChange(updated)
   }
 
   async function handleSetChange(
     exerciseId: string,
     setIndex: number,
-    field: 'weight' | 'reps',
+    field: 'weight' | 'reps' | 'durationSeconds',
     value: number
   ) {
     const entry = session.exercises.find((e) => e.exerciseId === exerciseId)

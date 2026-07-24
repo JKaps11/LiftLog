@@ -2,6 +2,7 @@ export interface Exercise {
   id: string
   name: string
   isUnilateral: boolean
+  isTimed: boolean
 }
 
 /** exerciseIds is an ordered list — order is significant and must be preserved. */
@@ -11,10 +12,15 @@ export interface Workout {
   exerciseIds: string[]
 }
 
-/** side is present only on Sets logged against a unilateral Exercise; absent on plain Sets. */
+/**
+ * side is present only on Sets logged against a unilateral Exercise; absent on plain Sets.
+ * durationSeconds is present only on Sets logged against a timed Exercise, in which case
+ * weight/reps are absent — the two shapes are mutually exclusive per Set.
+ */
 export interface SessionSet {
-  weight: number
-  reps: number
+  weight?: number
+  reps?: number
+  durationSeconds?: number
   side?: 'left' | 'right'
 }
 
