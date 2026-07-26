@@ -54,11 +54,24 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
     await onSave(name, exerciseIds)
   }
 
+  /**
+   * Both text inputs live inside the form that holds the Save button, so Enter
+   * — the "Go" key on an Android soft keyboard — would otherwise fire implicit
+   * form submission and save-and-exit the Workout mid-build. Saving is a
+   * deliberate Save tap only; Enter just dismisses the keyboard.
+   */
+  function dismissKeyboardOnEnter(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    event.currentTarget.blur()
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         value={name}
         onChange={(event) => setName(event.target.value)}
+        onKeyDown={dismissKeyboardOnEnter}
         placeholder="Workout name"
         aria-label="Workout name"
       />
@@ -115,6 +128,7 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
         <Input
           value={exerciseSearch}
           onChange={(event) => setExerciseSearch(event.target.value)}
+          onKeyDown={dismissKeyboardOnEnter}
           placeholder="Search exercises"
           aria-label="Search exercises"
           className="mb-2"
