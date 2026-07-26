@@ -1,16 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { SectionLabel } from '@/components/ui/section-label'
+import { ExerciseBadges, ExerciseBrowser } from '@/features/exercises/ExerciseBrowser'
 import type { Exercise, Workout } from '@/store'
-import {
-  exerciseNameById,
-  filterExercisesByName,
-  groupExercisesByMuscleGroup,
-  MUSCLE_GROUP_LABELS,
-} from './exerciseLookup'
+import { exerciseNameById } from './exerciseLookup'
 
 interface WorkoutFormProps {
   allExercises: Exercise[]
@@ -22,11 +18,30 @@ interface WorkoutFormProps {
 export function WorkoutForm({ allExercises, workout, onSave, onCancel }: WorkoutFormProps) {
   const [name, setName] = useState(workout?.name ?? '')
   const [exerciseIds, setExerciseIds] = useState<string[]>(workout?.exerciseIds ?? [])
-  const [exerciseSearch, setExerciseSearch] = useState('')
+  const [isPicking, setIsPicking] = useState(false)
 
   const selectedIds = new Set(exerciseIds)
-  const visibleExercises = filterExercisesByName(allExercises, exerciseSearch)
-  const groupedExercises = groupExercisesByMuscleGroup(visibleExercises)
+
+  /**
+   * The picker is a view swap rather than a route, so Android's back button
+   * would otherwise close the whole PWA from it. Push a history entry on open
+   * and treat popping it as Done; closing any other way consumes that entry so
+   * repeated opens don't stack up dead back presses.
+   */
+  useEffect(() => {
+    if (!isPicking) return
+    window.history.pushState(null, '')
+    let closedByBackButton = false
+    function handlePopState() {
+      closedByBackButton = true
+      setIsPicking(false)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+      if (!closedByBackButton) window.history.back()
+    }
+  }, [isPicking])
 
   function toggleExercise(id: string, checked: boolean) {
     setExerciseIds((current) =>
@@ -55,7 +70,7 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
   }
 
   /**
-   * Both text inputs live inside the form that holds the Save button, so Enter
+   * The name field lives inside the form that holds the Save button, so Enter
    * — the "Go" key on an Android soft keyboard — would otherwise fire implicit
    * form submission and save-and-exit the Workout mid-build. Saving is a
    * deliberate Save tap only; Enter just dismisses the keyboard.
@@ -64,6 +79,40 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
     if (event.key !== 'Enter') return
     event.preventDefault()
     event.currentTarget.blur()
+  }
+
+  // Full-screen picker: the same browsing surface as the Exercises tab, and
+  // deliberately outside the form element above — a search box inside a form
+  // with a submit button gets submitted by the Android keyboard's "Go" key.
+  if (isPicking) {
+    return (
+      <div className="flex flex-col gap-4">
+        <ExerciseBrowser
+          exercises={allExercises}
+          header={
+            <div className="flex items-center justify-between gap-2">
+              <SectionLabel className="mb-0">Add exercises</SectionLabel>
+              <Button type="button" size="sm" onClick={() => setIsPicking(false)}>
+                Done · {exerciseIds.length}
+              </Button>
+            </div>
+          }
+          renderRow={(exercise) => (
+            <>
+              <Checkbox
+                id={`pick-${exercise.id}`}
+                checked={selectedIds.has(exercise.id)}
+                onCheckedChange={(checked) => toggleExercise(exercise.id, checked === true)}
+              />
+              <label htmlFor={`pick-${exercise.id}`} className="flex-1 text-sm">
+                {exercise.name}
+                <ExerciseBadges exercise={exercise} />
+              </label>
+            </>
+          )}
+        />
+      </div>
+    )
   }
 
   return (
@@ -123,44 +172,15 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
         )}
       </div>
 
-      <div>
-        <SectionLabel>Add exercises</SectionLabel>
-        <Input
-          value={exerciseSearch}
-          onChange={(event) => setExerciseSearch(event.target.value)}
-          onKeyDown={dismissKeyboardOnEnter}
-          placeholder="Search exercises"
-          aria-label="Search exercises"
-          className="mb-2"
-        />
-        {visibleExercises.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No exercises match "{exerciseSearch.trim()}".
-          </p>
-        ) : (
-          <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">
-            {groupedExercises.map(({ muscleGroup, exercises: groupExercises }) => (
-              <div key={muscleGroup} className="flex flex-col gap-1">
-                <SectionLabel className="mb-0">{MUSCLE_GROUP_LABELS[muscleGroup]}</SectionLabel>
-                <ul className="flex flex-col gap-1">
-                  {groupExercises.map((exercise) => (
-                    <li key={exercise.id} className="flex items-center gap-2 px-2.5 py-1">
-                      <Checkbox
-                        id={`exercise-${exercise.id}`}
-                        checked={selectedIds.has(exercise.id)}
-                        onCheckedChange={(checked) => toggleExercise(exercise.id, checked === true)}
-                      />
-                      <label htmlFor={`exercise-${exercise.id}`} className="flex-1 text-sm">
-                        {exercise.name}
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setIsPicking(true)}
+        className="justify-between border-dashed text-muted-foreground"
+      >
+        <span>+ Add exercises</span>
+        <span>›</span>
+      </Button>
 
       <div className="flex gap-2">
         <Button type="submit">Save</Button>
