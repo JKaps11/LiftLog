@@ -1,29 +1,12 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { PageHeading } from '@/components/ui/page-heading'
-import { SectionLabel } from '@/components/ui/section-label'
 import { store } from '@/store/instance'
 import { EXERCISE_TYPES, MUSCLE_GROUPS, type Exercise, type ExerciseType, type MuscleGroup } from '@/store'
-import {
-  EXERCISE_TYPE_LABELS,
-  filterExercisesByName,
-  filterExercisesByType,
-  groupExercisesByMuscleGroup,
-  MUSCLE_GROUP_LABELS,
-  type ExerciseTypeFilter,
-} from '@/features/workouts/exerciseLookup'
-import { cn } from '@/lib/utils'
-
-/** Must match the sticky header's `top-3` class (0.75rem) in BrowseControls below. */
-const STICKY_TOP_PX = 12
-
-const TYPE_FILTERS: readonly ExerciseTypeFilter[] = ['all', ...EXERCISE_TYPES]
-const TYPE_FILTER_LABELS: Record<ExerciseTypeFilter, string> = {
-  all: 'All',
-  ...EXERCISE_TYPE_LABELS,
-}
+import { EXERCISE_TYPE_LABELS, MUSCLE_GROUP_LABELS } from '@/features/workouts/exerciseLookup'
+import { ExerciseBadges, ExerciseBrowser } from './ExerciseBrowser'
 
 const selectClassName =
   'h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm'
@@ -195,126 +178,6 @@ function ExerciseCategoryFields({
   )
 }
 
-/** Single-select scope filter: each exercise has exactly one type, so this is a segmented control, not a toggle group. */
-function TypeFilterControl({
-  value,
-  onChange,
-}: {
-  value: ExerciseTypeFilter
-  onChange: (next: ExerciseTypeFilter) => void
-}) {
-  return (
-    <div
-      role="group"
-      aria-label="Filter by type"
-      className="flex overflow-hidden rounded-lg border border-border"
-    >
-      {TYPE_FILTERS.map((type, index) => (
-        <button
-          key={type}
-          type="button"
-          onClick={() => onChange(type)}
-          aria-pressed={value === type}
-          className={cn(
-            'flex-1 px-1 py-1.5 text-[0.8125rem] text-muted-foreground',
-            index !== TYPE_FILTERS.length - 1 && 'border-r border-border',
-            value === type && 'bg-accent-foreground font-semibold text-background'
-          )}
-        >
-          {TYPE_FILTER_LABELS[type]}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-/**
- * Sticky header block: search + type filter + jump-to-group strip (Apple
- * HIG's alphabet-index pattern, generalized to muscle-group category) all
- * stick together as one unit so a long grouped list is reachable in one tap
- * instead of scroll-only. Highlights the group nearest the top of the
- * viewport as the user scrolls.
- */
-function BrowseControls({
-  className,
-  search,
-  onSearchChange,
-  typeFilter,
-  onTypeFilterChange,
-  groups,
-}: {
-  className?: string
-  search: string
-  onSearchChange: (value: string) => void
-  typeFilter: ExerciseTypeFilter
-  onTypeFilterChange: (next: ExerciseTypeFilter) => void
-  groups: MuscleGroup[]
-}) {
-  const [active, setActive] = useState<MuscleGroup | null>(null)
-  const headerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function updateActive() {
-      const headerBottom = headerRef.current?.getBoundingClientRect().bottom ?? 0
-      let current: MuscleGroup | null = null
-      for (const group of groups) {
-        const section = document.getElementById(`exercise-group-${group}`)
-        if (section && section.getBoundingClientRect().top - headerBottom < 40) current = group
-      }
-      setActive(current)
-    }
-    updateActive()
-    window.addEventListener('scroll', updateActive, { passive: true })
-    return () => window.removeEventListener('scroll', updateActive)
-  }, [groups])
-
-  function jumpTo(group: MuscleGroup) {
-    const target = document.getElementById(`exercise-group-${group}`)
-    if (!target) return
-    // scrollIntoView's block:'start' aligns the section header with the
-    // viewport top, but this whole block is sticky (offset by STICKY_TOP_PX,
-    // see className below) and then sits on top of that same position —
-    // offset by its own rendered height plus that gap so it doesn't cover
-    // the header it just scrolled to.
-    const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
-    const targetTop = target.getBoundingClientRect().top + window.scrollY - (headerHeight + STICKY_TOP_PX)
-    window.scrollTo({ top: targetTop, behavior: 'smooth' })
-  }
-
-  return (
-    // top-3 (not top-0) so scrolling only opens a gap above the header once it's
-    // actually stuck — padding inside the box instead would also push it down
-    // in its normal, unstuck resting position, widening the gap below the
-    // "+ New exercise" button too.
-    <div ref={headerRef} className={cn('sticky top-3 z-10 flex flex-col gap-2 bg-background pb-2', className)}>
-      <Input
-        value={search}
-        onChange={(event) => onSearchChange(event.target.value)}
-        placeholder="Search exercises"
-        aria-label="Search exercises"
-      />
-      <TypeFilterControl value={typeFilter} onChange={onTypeFilterChange} />
-      {groups.length > 0 && (
-        <nav aria-label="Jump to muscle group" className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
-          {groups.map((group) => (
-            <button
-              key={group}
-              type="button"
-              onClick={() => jumpTo(group)}
-              className={cn(
-                'shrink-0 rounded-full border border-border bg-muted px-2.5 py-1 text-xs whitespace-nowrap text-muted-foreground',
-                active === group && 'border-accent-foreground bg-accent-foreground text-background'
-              )}
-            >
-              {MUSCLE_GROUP_LABELS[group]}
-            </button>
-          ))}
-        </nav>
-      )}
-    </div>
-  )
-}
-
 export function ExercisesPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -324,12 +187,7 @@ export function ExercisesPage() {
   const [newTimedAutoDefaulted, setNewTimedAutoDefaulted] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingDraft, setEditingDraft] = useState<ExerciseDraft>(emptyDraft())
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState<ExerciseTypeFilter>('all')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-
-  const visibleExercises = filterExercisesByType(filterExercisesByName(exercises, search), typeFilter)
-  const groups = groupExercisesByMuscleGroup(visibleExercises)
 
   async function refresh() {
     setExercises(await store.listExercises())
@@ -377,6 +235,50 @@ export function ExercisesPage() {
     await refresh()
   }
 
+  function renderRow(exercise: Exercise) {
+    if (editingId === exercise.id) {
+      return (
+        <form onSubmit={handleRename} className="flex flex-1 flex-col gap-2">
+          <div className="flex gap-2">
+            <Input
+              autoFocus
+              value={editingDraft.name}
+              onChange={(event) => setEditingDraft({ ...editingDraft, name: event.target.value })}
+              aria-label={`Rename ${exercise.name}`}
+            />
+            <Button type="submit" size="sm">
+              Save
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditingId(null)}>
+              Cancel
+            </Button>
+          </div>
+          <ExerciseCategoryFields
+            idPrefix={`edit-${exercise.id}`}
+            label={exercise.name}
+            draft={editingDraft}
+            onChange={setEditingDraft}
+          />
+        </form>
+      )
+    }
+
+    return (
+      <>
+        <span className="flex-1">
+          {exercise.name}
+          <ExerciseBadges exercise={exercise} />
+        </span>
+        <Button variant="outline" size="sm" onClick={() => startEditing(exercise)}>
+          Rename
+        </Button>
+        <Button variant="destructive" size="sm" onClick={() => handleDelete(exercise.id)}>
+          Delete
+        </Button>
+      </>
+    )
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
       <PageHeading>Exercises</PageHeading>
@@ -412,102 +314,19 @@ export function ExercisesPage() {
       )}
 
       {/*
-       * BrowseControls must stay a direct child of main (not nested in a
-       * smaller wrapper) — a sticky element can only stick within its own
+       * ExerciseBrowser renders as a fragment, so its sticky header stays a
+       * direct child of main — a sticky element can only stick within its own
        * containing block's bounds, and main is the one ancestor tall enough
        * (it also holds the whole exercise list) for that to matter. -mt-2
        * cancels half of main's gap-4 above it, tightening it visually against
        * the "+ New exercise" button, without shrinking that containing block.
        */}
-      <BrowseControls
-        className="-mt-2"
-        search={search}
-        onSearchChange={setSearch}
-        typeFilter={typeFilter}
-        onTypeFilterChange={setTypeFilter}
-        groups={groups.map((g) => g.muscleGroup)}
+      <ExerciseBrowser
+        exercises={exercises}
+        renderRow={renderRow}
+        controlsClassName="-mt-2"
+        emptyMessage={isLoading ? <p className="text-muted-foreground">Loading exercises…</p> : undefined}
       />
-
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading exercises…</p>
-      ) : visibleExercises.length === 0 ? (
-        <p className="text-muted-foreground">
-          {search.trim() ? `No exercises match "${search.trim()}".` : 'No exercises match this filter.'}
-        </p>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {groups.map(({ muscleGroup, exercises: groupExercises }) => (
-            <div key={muscleGroup} id={`exercise-group-${muscleGroup}`} className="flex flex-col gap-1">
-              <SectionLabel className="mb-0">{MUSCLE_GROUP_LABELS[muscleGroup]}</SectionLabel>
-              <ul className="flex flex-col gap-1">
-                {groupExercises.map((exercise) => (
-                  <li
-                    key={exercise.id}
-                    className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5"
-                  >
-                    {editingId === exercise.id ? (
-                      <form onSubmit={handleRename} className="flex flex-1 flex-col gap-2">
-                        <div className="flex gap-2">
-                          <Input
-                            autoFocus
-                            value={editingDraft.name}
-                            onChange={(event) =>
-                              setEditingDraft({ ...editingDraft, name: event.target.value })
-                            }
-                            aria-label={`Rename ${exercise.name}`}
-                          />
-                          <Button type="submit" size="sm">
-                            Save
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEditingId(null)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                        <ExerciseCategoryFields
-                          idPrefix={`edit-${exercise.id}`}
-                          label={exercise.name}
-                          draft={editingDraft}
-                          onChange={setEditingDraft}
-                        />
-                      </form>
-                    ) : (
-                      <>
-                        <span className="flex-1">
-                          {exercise.name}
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            ({EXERCISE_TYPE_LABELS[exercise.type]})
-                          </span>
-                          {exercise.isUnilateral && (
-                            <span className="ml-2 text-xs text-muted-foreground">(unilateral)</span>
-                          )}
-                          {exercise.isTimed && (
-                            <span className="ml-2 text-xs text-muted-foreground">(timed)</span>
-                          )}
-                        </span>
-                        <Button variant="outline" size="sm" onClick={() => startEditing(exercise)}>
-                          Rename
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(exercise.id)}
-                        >
-                          Delete
-                        </Button>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
     </main>
   )
 }
