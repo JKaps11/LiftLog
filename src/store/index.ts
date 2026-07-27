@@ -178,8 +178,27 @@ export class Store {
     return updated
   }
 
+  /**
+   * Cascades into Workouts, which hold live references — a Workout must never
+   * keep an exerciseId with no Exercise behind it, or the UI has nothing to
+   * render but the raw id. Sessions are deliberately left alone: they are
+   * snapshots (ADR-0001) and already carry exerciseNameAtLogTime for exactly
+   * this case.
+   */
   async deleteExercise(id: string): Promise<void> {
     await this.exercises.delete(id)
+
+    const affected = (await this.workouts.toArray()).filter((workout) =>
+      workout.exerciseIds.includes(id)
+    )
+    await Promise.all(
+      affected.map((workout) =>
+        this.workouts.put({
+          ...workout,
+          exerciseIds: workout.exerciseIds.filter((exerciseId) => exerciseId !== id),
+        })
+      )
+    )
   }
 
   async listWorkouts(): Promise<Workout[]> {
@@ -238,6 +257,10 @@ export class Store {
    * defensive display in case the Exercise is later deleted. Each Exercise's
    * Sets pre-fill from the most recent prior Session for this Workout, or
    * start with a single empty set if there is none.
+   *
+   * An exerciseId with no Exercise behind it is skipped rather than snapshotted
+   * — the denormalized name would be the raw uuid, and a Session is permanent,
+   * so the bad name could never be repaired afterward.
    */
   async startSession(workoutId: string): Promise<Session> {
     const workout = await this.workouts.get(workoutId)
@@ -245,18 +268,20 @@ export class Store {
 
     const lastSession = await this.getLastSessionForWorkout(workoutId)
 
-    const exercises: SessionExerciseEntry[] = await Promise.all(
+    const resolved = await Promise.all(
       workout.exerciseIds.map(async (exerciseId) => {
         const exercise = await this.exercises.get(exerciseId)
+        if (!exercise) return null
         const priorSets = lastSession?.exercises.find((entry) => entry.exerciseId === exerciseId)
           ?.sets ?? [emptySet()]
         return {
           exerciseId,
-          exerciseNameAtLogTime: exercise?.name ?? exerciseId,
+          exerciseNameAtLogTime: exercise.name,
           sets: priorSets.map((set) => ({ ...set })),
         }
       })
     )
+    const exercises: SessionExerciseEntry[] = resolved.filter((entry) => entry !== null)
 
     const now = new Date().toISOString()
     const session: Session = {

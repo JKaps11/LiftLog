@@ -21,8 +21,16 @@ export const EXERCISE_TYPE_LABELS: Record<ExerciseType, string> = {
   mobility: 'Mobility',
 }
 
+/**
+ * deleteExercise prunes the Exercise from every Workout, so an unresolvable id
+ * should not occur — but data written before that cascade existed (or a
+ * hand-edited import) can still carry one. Name it as deleted rather than
+ * leaking the raw uuid into the UI, which reads as a corrupted Exercise.
+ */
+export const DELETED_EXERCISE_LABEL = 'Deleted exercise'
+
 export function exerciseNameById(exercises: Exercise[], id: string): string {
-  return exercises.find((exercise) => exercise.id === id)?.name ?? id
+  return exercises.find((exercise) => exercise.id === id)?.name ?? DELETED_EXERCISE_LABEL
 }
 
 export function filterExercisesByName(exercises: Exercise[], query: string): Exercise[] {

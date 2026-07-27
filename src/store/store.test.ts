@@ -374,6 +374,46 @@ describe('Store', () => {
 
       expect(await store.listExercises()).toEqual([])
     })
+
+    it('removes the deleted Exercise from every Workout that referenced it', async () => {
+      const bench = await createExercise('Bench Press')
+      const raise = await createExercise('Cable Lateral Raise')
+      const push = await store.createWorkout('Push Day', [bench.id, raise.id])
+      const shoulders = await store.createWorkout('Shoulders', [raise.id])
+
+      await store.deleteExercise(raise.id)
+
+      const stored = await store.listWorkouts()
+      expect(stored.find((w) => w.id === push.id)?.exerciseIds).toEqual([bench.id])
+      expect(stored.find((w) => w.id === shoulders.id)?.exerciseIds).toEqual([])
+    })
+
+    it('leaves no dangling id behind when an Exercise is replaced by a unilateral version', async () => {
+      const old = await createExercise('Cable Lateral Raise')
+      const workout = await store.createWorkout('Shoulders', [old.id])
+
+      await store.deleteExercise(old.id)
+      const replacement = await createExercise('Cable Lateral Raise', { isUnilateral: true })
+
+      const [stored] = await store.listWorkouts()
+      expect(stored.exerciseIds).not.toContain(old.id)
+      expect(stored.exerciseIds).toEqual([])
+      expect(workout.id).toBe(stored.id)
+      expect(replacement.isUnilateral).toBe(true)
+    })
+
+    it('leaves Sessions untouched, which keep their own snapshot (ADR-0001)', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await store.deleteExercise(bench.id)
+
+      const [stored] = await store.listSessions()
+      expect(stored.id).toBe(session.id)
+      expect(stored.exercises).toHaveLength(1)
+      expect(stored.exercises[0].exerciseNameAtLogTime).toBe('Bench Press')
+    })
   })
 
   describe('createWorkout', () => {
@@ -490,6 +530,18 @@ describe('Store', () => {
   })
 
   describe('startSession', () => {
+    it('skips an exerciseId with no Exercise behind it rather than snapshotting the raw id as its name', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      // A dangling reference, as written by a build predating deleteExercise's cascade.
+      await workouts.put({ ...workout, exerciseIds: [bench.id, 'no-such-exercise-id'] })
+
+      const session = await store.startSession(workout.id)
+
+      expect(session.exercises).toHaveLength(1)
+      expect(session.exercises[0].exerciseNameAtLogTime).toBe('Bench Press')
+    })
+
     it('snapshots the Workout name and Exercise list, denormalizing each Exercise name, with one empty set when there is no prior Session', async () => {
       const bench = await createExercise('Bench Press')
       const ohp = await createExercise('Overhead Press')
