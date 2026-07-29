@@ -13,7 +13,15 @@ interface ActiveSessionProps {
 }
 
 export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSessionProps) {
-  const { notes, setNotes, handleAddSet, handleSetChange, handleDeleteSet, handleNotesBlur } =
+  const {
+    notes,
+    setNotes,
+    handleAddSet,
+    handleSetChange,
+    handleSetReplace,
+    handleDeleteSet,
+    handleNotesBlur,
+  } =
     useSessionEditing(session, onChange)
 
   return (
@@ -31,6 +39,7 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
               exercises={exercises}
               onAddSet={handleAddSet}
               onSetChange={handleSetChange}
+              onSetReplace={handleSetReplace}
               onDeleteSet={handleDeleteSet}
             />
           ))}

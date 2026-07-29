@@ -1,15 +1,11 @@
 import { X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import {
-  isSetLogged,
-  resolveExerciseDisplayName,
-  type Exercise,
-  type SessionExerciseEntry,
-} from '@/store'
+import { resolveExerciseDisplayName, type Exercise, type SessionExerciseEntry, type SessionSet } from '@/store'
 import { groupSessionSets } from './sessionSetGrouping'
-import { resolveSetLayout } from './setDisplay'
+import { acceptGhostValues, resolveGhostSets, resolveSetRow, type SetField } from './setDisplay'
 
 interface SessionExerciseCardProps {
   entry: SessionExerciseEntry
@@ -21,35 +17,63 @@ interface SessionExerciseCardProps {
     field: 'weight' | 'reps' | 'durationSeconds',
     value: number | undefined
   ) => void
+  onSetReplace: (exerciseId: string, setIndex: number, set: SessionSet) => void
   onDeleteSet: (exerciseId: string, setIndex: number) => void
 }
 
 /**
  * A single numeric Set field (weight, reps, or duration) with its unit label.
- * An absent measurement renders as a genuinely empty input, never as 0 — that
- * emptiness is what marks the Set as not yet performed (ADR-0004) — and clearing
- * the field reports `undefined` rather than `Number('') === 0`, so a Set can be
- * returned to Pending.
+ *
+ * An absent measurement renders as a genuinely empty input showing its Ghost
+ * Value as placeholder text — that emptiness is what marks the Set as not yet
+ * performed (ADR-0004). Clearing the field reports `undefined` rather than
+ * `Number('') === 0`, returning the Set to Pending.
+ *
+ * Focusing an empty field accepts the whole row's Ghost Values, then selects the
+ * text once it arrives so the next keystroke replaces it. The selection waits on
+ * the value because accepting is a persisted round-trip: at focus time the input
+ * is still empty, and selecting nothing would leave the caret appending to a
+ * number the lifter meant to overwrite.
  */
 function SetValueField({
   inputMode,
-  value,
+  field,
   onChange,
+  onFocus,
   ariaLabel,
   unit,
 }: {
   inputMode: 'decimal' | 'numeric'
-  value: number | undefined
+  field: SetField
   onChange: (value: number | undefined) => void
+  onFocus: () => void
   ariaLabel: string
   unit: string
 }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const awaitingAcceptedValue = useRef(false)
+
+  useEffect(() => {
+    if (!awaitingAcceptedValue.current) return
+    if (field.value === undefined) return
+    awaitingAcceptedValue.current = false
+    if (inputRef.current && inputRef.current === document.activeElement) {
+      inputRef.current.select()
+    }
+  }, [field.value])
+
   return (
     <>
       <Input
+        ref={inputRef}
         type="number"
         inputMode={inputMode}
-        value={value ?? ''}
+        value={field.value ?? ''}
+        placeholder={field.ghost === undefined ? undefined : String(field.ghost)}
+        onFocus={() => {
+          awaitingAcceptedValue.current = field.value === undefined
+          onFocus()
+        }}
         onChange={(event) =>
           onChange(event.target.value === '' ? undefined : Number(event.target.value))
         }
@@ -69,14 +93,22 @@ export function SessionExerciseCard({
   exercises,
   onAddSet,
   onSetChange,
+  onSetReplace,
   onDeleteSet,
 }: SessionExerciseCardProps) {
   const displayName = resolveExerciseDisplayName(exercises, entry)
   const liveExercise = exercises.find((exercise) => exercise.id === entry.exerciseId)
   const groups = groupSessionSets(entry.sets)
+  const ghosts = resolveGhostSets(entry.sets, liveExercise)
 
   function sideLetter(side: 'left' | 'right') {
     return side === 'left' ? 'L' : 'R'
+  }
+
+  /** Touching any field of a Pending Set logs the whole row from its Ghost Values — one tap, not one per field. */
+  function acceptRow(setIndex: number, set: SessionSet) {
+    const accepted = acceptGhostValues(liveExercise, set, ghosts[setIndex])
+    if (accepted) onSetReplace(entry.exerciseId, setIndex, accepted)
   }
 
   return (
@@ -89,6 +121,7 @@ export function SessionExerciseCard({
               const label = set.side
                 ? `Set ${groupIndex + 1} (${sideLetter(set.side)})`
                 : `Set ${groupIndex + 1}`
+              const row = resolveSetRow(liveExercise, set, ghosts[index])
               return (
                 <li
                   key={index}
@@ -100,7 +133,7 @@ export function SessionExerciseCard({
                   <span
                     className={cn(
                       'flex size-8 shrink-0 flex-col items-center justify-center rounded-md border font-mono text-sm tabular-nums',
-                      isSetLogged(liveExercise, set)
+                      row.isLogged
                         ? 'border-transparent bg-muted text-foreground'
                         : 'border-dashed border-muted-foreground/40 bg-transparent text-muted-foreground/70'
                     )}
@@ -112,11 +145,12 @@ export function SessionExerciseCard({
                       </span>
                     )}
                   </span>
-                  {resolveSetLayout(liveExercise, set) === 'timed' ? (
+                  {row.duration ? (
                     <SetValueField
                       inputMode="numeric"
-                      value={set.durationSeconds}
+                      field={row.duration}
                       onChange={(value) => onSetChange(entry.exerciseId, index, 'durationSeconds', value)}
+                      onFocus={() => acceptRow(index, set)}
                       ariaLabel={`${label} duration (seconds) for ${displayName}`}
                       unit="sec"
                     />
@@ -124,16 +158,18 @@ export function SessionExerciseCard({
                     <>
                       <SetValueField
                         inputMode="decimal"
-                        value={set.weight}
+                        field={row.weight ?? { value: undefined, ghost: undefined }}
                         onChange={(value) => onSetChange(entry.exerciseId, index, 'weight', value)}
+                        onFocus={() => acceptRow(index, set)}
                         ariaLabel={`${label} weight (lbs) for ${displayName}`}
                         unit="lbs"
                       />
                       <span className="text-muted-foreground">×</span>
                       <SetValueField
                         inputMode="numeric"
-                        value={set.reps}
+                        field={row.reps ?? { value: undefined, ghost: undefined }}
                         onChange={(value) => onSetChange(entry.exerciseId, index, 'reps', value)}
+                        onFocus={() => acceptRow(index, set)}
                         ariaLabel={`${label} reps for ${displayName}`}
                         unit="reps"
                       />

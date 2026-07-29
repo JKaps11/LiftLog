@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { store } from '@/store/instance'
-import type { Session } from '@/store'
+import type { Session, SessionSet } from '@/store'
 
 /** Set/notes editing behavior shared between logging an active Session and editing a past one. */
 export function useSessionEditing(session: Session, onChange: (session: Session) => void) {
@@ -27,6 +27,12 @@ export function useSessionEditing(session: Session, onChange: (session: Session)
     onChange(updated)
   }
 
+  /** Writes a whole Set at once — used when accepting a Pending Set's Ghost Values, which fills every measurement in one act. */
+  async function handleSetReplace(exerciseId: string, setIndex: number, set: SessionSet) {
+    const updated = await store.updateSet(session.id, exerciseId, setIndex, set)
+    onChange(updated)
+  }
+
   async function handleDeleteSet(exerciseId: string, setIndex: number) {
     const updated = await store.deleteSet(session.id, exerciseId, setIndex)
     onChange(updated)
@@ -37,5 +43,13 @@ export function useSessionEditing(session: Session, onChange: (session: Session)
     onChange(updated)
   }
 
-  return { notes, setNotes, handleAddSet, handleSetChange, handleDeleteSet, handleNotesBlur }
+  return {
+    notes,
+    setNotes,
+    handleAddSet,
+    handleSetChange,
+    handleSetReplace,
+    handleDeleteSet,
+    handleNotesBlur,
+  }
 }

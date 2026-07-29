@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Exercise } from '@/store'
-import { resolveSetLayout } from './setDisplay'
+import { acceptGhostValues, resolveGhostSets, resolveSetLayout, resolveSetRow } from './setDisplay'
 
 function exercise(overrides: Partial<Exercise> = {}): Exercise {
   return {
@@ -44,5 +44,153 @@ describe('resolveSetLayout', () => {
 
   it('falls back to weighted for a Pending Set whose Exercise has been deleted', () => {
     expect(resolveSetLayout(undefined, {})).toBe('weighted')
+  })
+})
+
+describe('resolveGhostSets', () => {
+  it('offers no Ghost Values when every Set is already Logged', () => {
+    const sets = [
+      { weight: 135, reps: 8 },
+      { weight: 135, reps: 8 },
+    ]
+    expect(resolveGhostSets(sets, exercise())).toEqual([undefined, undefined])
+  })
+
+  it('ghosts a Pending Set from the Logged Set before it', () => {
+    const sets = [{ weight: 135, reps: 8 }, {}]
+    expect(resolveGhostSets(sets, exercise())).toEqual([undefined, { weight: 135, reps: 8 }])
+  })
+
+  it('ghosts from the most recent Logged Set, not the first', () => {
+    const sets = [{ weight: 135, reps: 8 }, { weight: 145, reps: 6 }, {}]
+    expect(resolveGhostSets(sets, exercise())[2]).toEqual({ weight: 145, reps: 6 })
+  })
+
+  it('offers no Ghost Value when nothing has been Logged yet', () => {
+    expect(resolveGhostSets([{}, {}], exercise())).toEqual([undefined, undefined])
+  })
+
+  it('ghosts a Pending Set from the Logged Set before it, not one logged after it', () => {
+    const sets = [{ weight: 135, reps: 8 }, {}, { weight: 155, reps: 4 }]
+    expect(resolveGhostSets(sets, exercise())[1]).toEqual({ weight: 135, reps: 8 })
+  })
+
+  it('matches left to left and right to right across unilateral pairs', () => {
+    const unilateral = exercise({ isUnilateral: true })
+    const sets = [
+      { weight: 40, reps: 10, side: 'left' as const },
+      { weight: 35, reps: 10, side: 'right' as const },
+      { side: 'left' as const },
+      { side: 'right' as const },
+    ]
+    const ghosts = resolveGhostSets(sets, unilateral)
+    expect(ghosts[2]).toEqual({ weight: 40, reps: 10, side: 'left' })
+    expect(ghosts[3]).toEqual({ weight: 35, reps: 10, side: 'right' })
+  })
+
+  it('ghosts both sides of a Pending pair from a solo Logged Set predating the Exercise becoming unilateral', () => {
+    const unilateral = exercise({ isUnilateral: true })
+    const sets = [
+      { weight: 30, reps: 10 },
+      { side: 'left' as const },
+      { side: 'right' as const },
+    ]
+    const ghosts = resolveGhostSets(sets, unilateral)
+    expect(ghosts[1]).toEqual({ weight: 30, reps: 10 })
+    expect(ghosts[2]).toEqual({ weight: 30, reps: 10 })
+  })
+
+  it('ghosts a duration for a timed Exercise', () => {
+    const plank = exercise({ isTimed: true })
+    expect(resolveGhostSets([{ durationSeconds: 60 }, {}], plank)[1]).toEqual({
+      durationSeconds: 60,
+    })
+  })
+
+  it('treats a partially-entered Set as not a Ghost Value source', () => {
+    const sets = [{ weight: 135, reps: 8 }, { weight: 145 }, {}]
+    expect(resolveGhostSets(sets, exercise())[2]).toEqual({ weight: 135, reps: 8 })
+  })
+})
+
+describe('resolveSetRow', () => {
+  it('shows a Pending Set’s Ghost Values with no solid values', () => {
+    const row = resolveSetRow(exercise(), {}, { weight: 135, reps: 8 })
+    expect(row.layout).toBe('weighted')
+    expect(row.isLogged).toBe(false)
+    expect(row.weight).toEqual({ value: undefined, ghost: 135 })
+    expect(row.reps).toEqual({ value: undefined, ghost: 8 })
+  })
+
+  it('shows a Logged Set’s solid values', () => {
+    const row = resolveSetRow(exercise(), { weight: 145, reps: 6 }, { weight: 135, reps: 8 })
+    expect(row.isLogged).toBe(true)
+    expect(row.weight?.value).toBe(145)
+    expect(row.reps?.value).toBe(6)
+  })
+
+  it('keeps the Ghost Value on the still-empty field of a partially-entered Set', () => {
+    const row = resolveSetRow(exercise(), { weight: 145 }, { weight: 135, reps: 8 })
+    expect(row.isLogged).toBe(false)
+    expect(row.weight).toEqual({ value: 145, ghost: 135 })
+    expect(row.reps).toEqual({ value: undefined, ghost: 8 })
+  })
+
+  it('offers neither value nor Ghost Value for a Pending Set with no history', () => {
+    const row = resolveSetRow(exercise(), {}, undefined)
+    expect(row.weight).toEqual({ value: undefined, ghost: undefined })
+    expect(row.reps).toEqual({ value: undefined, ghost: undefined })
+  })
+
+  it('exposes only a duration field for a timed Exercise', () => {
+    const row = resolveSetRow(exercise({ isTimed: true }), {}, { durationSeconds: 60 })
+    expect(row.layout).toBe('timed')
+    expect(row.duration).toEqual({ value: undefined, ghost: 60 })
+    expect(row.weight).toBeUndefined()
+    expect(row.reps).toBeUndefined()
+  })
+})
+
+describe('acceptGhostValues', () => {
+  it('fills every measurement of a Pending Set from its Ghost Values in one go', () => {
+    expect(acceptGhostValues(exercise(), {}, { weight: 135, reps: 8 })).toEqual({
+      weight: 135,
+      reps: 8,
+    })
+  })
+
+  it('fills only the still-absent measurement of a partially-entered Set', () => {
+    expect(acceptGhostValues(exercise(), { weight: 145 }, { weight: 135, reps: 8 })).toEqual({
+      weight: 145,
+      reps: 8,
+    })
+  })
+
+  it('preserves the Set’s side', () => {
+    expect(
+      acceptGhostValues(exercise({ isUnilateral: true }), { side: 'left' }, { weight: 40, reps: 10 })
+    ).toEqual({ weight: 40, reps: 10, side: 'left' })
+  })
+
+  it('fills only a duration for a timed Exercise, ignoring stray weight/reps in the Ghost', () => {
+    expect(
+      acceptGhostValues(exercise({ isTimed: true }), {}, { durationSeconds: 60, weight: 99 })
+    ).toEqual({ durationSeconds: 60 })
+  })
+
+  it('declines to write when there are no Ghost Values to accept', () => {
+    expect(acceptGhostValues(exercise(), {}, undefined)).toBeUndefined()
+  })
+
+  it('declines to write when the Set is already Logged', () => {
+    expect(acceptGhostValues(exercise(), { weight: 145, reps: 6 }, { weight: 135, reps: 8 })).toBeUndefined()
+  })
+
+  it('declines to write when the Ghost has nothing the Set is missing', () => {
+    expect(acceptGhostValues(exercise(), {}, { reps: undefined, weight: undefined })).toBeUndefined()
+  })
+
+  it('fills what it can when the Ghost covers only one measurement, leaving the Set Pending', () => {
+    expect(acceptGhostValues(exercise(), {}, { weight: 135 })).toEqual({ weight: 135 })
   })
 })

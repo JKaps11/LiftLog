@@ -17,7 +17,15 @@ interface SessionDetailProps {
 }
 
 export function SessionDetail({ session, exercises, onChange, onDelete, onBack }: SessionDetailProps) {
-  const { notes, setNotes, handleAddSet, handleSetChange, handleDeleteSet, handleNotesBlur } =
+  const {
+    notes,
+    setNotes,
+    handleAddSet,
+    handleSetChange,
+    handleSetReplace,
+    handleDeleteSet,
+    handleNotesBlur,
+  } =
     useSessionEditing(session, onChange)
 
   async function handleStartTimeChange(value: string) {
@@ -96,6 +104,7 @@ export function SessionDetail({ session, exercises, onChange, onDelete, onBack }
               exercises={exercises}
               onAddSet={handleAddSet}
               onSetChange={handleSetChange}
+              onSetReplace={handleSetReplace}
               onDeleteSet={handleDeleteSet}
             />
           ))}
