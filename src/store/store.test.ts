@@ -698,6 +698,71 @@ describe('Store', () => {
 
       expect(updated.exercises[0].sets.at(-1)).toEqual({ weight: 0, reps: 0 })
     })
+
+    it('carries weight forward from the last Set when no explicit set argument is given, leaving reps at 0', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
+
+      const updated = await store.logSet(session.id, bench.id)
+
+      expect(updated.exercises[0].sets.at(-1)).toEqual({ weight: 135, reps: 0 })
+    })
+
+    it('carries duration forward from the last Set when no explicit set argument is given, for a timed Exercise', async () => {
+      const plank = await createExercise('Plank', { isTimed: true })
+      const workout = await store.createWorkout('Core', [plank.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, plank.id, { durationSeconds: 45 })
+
+      const updated = await store.logSet(session.id, plank.id)
+
+      expect(updated.exercises[0].sets.at(-1)).toEqual({ durationSeconds: 45 })
+    })
+
+    it('carries weight forward per side into an added pair, for a unilateral Exercise with an asymmetric load', async () => {
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+      const paired = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
+      await store.updateSet(paired.id, row.id, 2, { weight: 35, reps: 10, side: 'right' })
+
+      const updated = await store.logSet(session.id, row.id)
+
+      expect(updated.exercises[0].sets.slice(-2)).toEqual([
+        { weight: 40, reps: 0, side: 'left' },
+        { weight: 35, reps: 0, side: 'right' },
+      ])
+    })
+
+    it('falls back to a zeroed Set when the Exercise has no Sets left to carry from', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      const logged = await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
+      await store.deleteSet(logged.id, bench.id, 1)
+      await store.deleteSet(logged.id, bench.id, 0)
+
+      const updated = await store.logSet(session.id, bench.id)
+
+      expect(updated.exercises[0].sets).toEqual([{ weight: 0, reps: 0 }])
+    })
+
+    it('falls back to zeroed Sets when the preceding Sets predate the Exercise becoming unilateral', async () => {
+      const curl = await createExercise('Bicep Curl', { isUnilateral: false })
+      const workout = await store.createWorkout('Arms', [curl.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, curl.id, { weight: 30, reps: 10 })
+      await store.updateExercise(curl.id, { isUnilateral: true })
+
+      const updated = await store.logSet(session.id, curl.id)
+
+      expect(updated.exercises[0].sets.slice(-2)).toEqual([
+        { weight: 0, reps: 0, side: 'left' },
+        { weight: 0, reps: 0, side: 'right' },
+      ])
+    })
   })
 
   describe('updateSet', () => {

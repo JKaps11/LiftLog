@@ -70,6 +70,43 @@ export function resolveExerciseDisplayName(
   return live?.name ?? entry.exerciseNameAtLogTime
 }
 
+/**
+ * The Set a newly added Set carries its load from — the last logical Set,
+ * meaning the matching half of the final left+right pair when adding to a
+ * unilateral Exercise, or the final Set alone when adding a plain Set. The
+ * look-back is deliberately exactly one logical Set, never a scan back through
+ * the list: whatever is at the end is what the lifter just did.
+ *
+ * Requesting a side when the list doesn't end in a pair (e.g. plain Sets logged
+ * before isUnilateral was turned on) yields nothing, so the new pair falls back
+ * to zeroes rather than guessing a side. Pair adjacency is the same invariant
+ * logSet/deleteSet rely on.
+ */
+function lastLoggedSet(sets: SessionSet[], side?: 'left' | 'right'): SessionSet | undefined {
+  const last = sets.at(-1)
+  if (!side) return last
+
+  const beforeLast = sets.at(-2)
+  if (beforeLast?.side !== 'left' || last?.side !== 'right') return undefined
+  return side === 'left' ? beforeLast : last
+}
+
+/**
+ * Builds the Set that "Add set" appends, carrying the *load* forward from the
+ * preceding Set — weight for a weighted Exercise, duration for a timed one —
+ * because the bar is already loaded and the hold time is a target you dial in.
+ * Reps are deliberately NOT carried: the rep count is the outcome you're
+ * pushing set to set, so it changes nearly every time, and a prefilled count
+ * you forget to correct silently records a lift that never happened. Starting a
+ * Session is different — see startSession, which clones the previous Session's
+ * full grid, reps included, as the performance to beat.
+ */
+function carryLoadForward(previous: SessionSet | undefined, isTimed: boolean): SessionSet {
+  return isTimed
+    ? { durationSeconds: previous?.durationSeconds ?? 0 }
+    : { weight: previous?.weight ?? 0, reps: 0 }
+}
+
 export class Store {
   private readonly exercises: EntityTable<Exercise>
   private readonly workouts: EntityTable<Workout>
@@ -301,28 +338,31 @@ export class Store {
   /**
    * Against a unilateral Exercise (checked live by exerciseId), appends a
    * left+right pair of Sets in one call instead of a single Set. When `set` is
-   * omitted (the "Add set" path), the base Set is constructed live from the
-   * Exercise's current isTimed flag — { durationSeconds: 0 } for a timed
-   * Exercise, { weight: 0, reps: 0 } otherwise — rather than the caller
-   * needing to know which shape to build.
+   * omitted (the "Add set" path), the new Set is constructed live from the
+   * Exercise's current isTimed flag and carries the load forward from the
+   * Session's last logical Set (see carryLoadForward), rather than the caller
+   * needing to know which shape to build or what to prefill.
    */
   async logSet(sessionId: string, exerciseId: string, set?: SessionSet): Promise<Session> {
     const session = await this.requireSession(sessionId)
-    if (!session.exercises.some((entry) => entry.exerciseId === exerciseId)) {
+    const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
+    if (!entry) {
       throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
     }
 
     const exercise = await this.exercises.get(exerciseId)
-    const base: SessionSet = set ?? (exercise?.isTimed ? { durationSeconds: 0 } : { weight: 0, reps: 0 })
-    const newSets: SessionSet[] = exercise?.isUnilateral
-      ? [
-          { ...base, side: 'left' },
-          { ...base, side: 'right' },
-        ]
-      : [{ ...base }]
+    const isTimed = exercise?.isTimed ?? false
+    const isUnilateral = exercise?.isUnilateral ?? false
 
-    const exercises = session.exercises.map((entry) =>
-      entry.exerciseId === exerciseId ? { ...entry, sets: [...entry.sets, ...newSets] } : entry
+    const logged = entry.sets
+    function build(side?: 'left' | 'right'): SessionSet {
+      const base = set ?? carryLoadForward(lastLoggedSet(logged, side), isTimed)
+      return side ? { ...base, side } : { ...base }
+    }
+    const newSets: SessionSet[] = isUnilateral ? [build('left'), build('right')] : [build()]
+
+    const exercises = session.exercises.map((e) =>
+      e.exerciseId === exerciseId ? { ...e, sets: [...e.sets, ...newSets] } : e
     )
     const updated: Session = { ...session, exercises }
     await this.sessions.put(updated)
