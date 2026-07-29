@@ -2,7 +2,12 @@ import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { resolveExerciseDisplayName, type Exercise, type SessionExerciseEntry } from '@/store'
+import {
+  isSetLogged,
+  resolveExerciseDisplayName,
+  type Exercise,
+  type SessionExerciseEntry,
+} from '@/store'
 import { groupSessionSets } from './sessionSetGrouping'
 import { resolveSetLayout } from './setDisplay'
 
@@ -14,12 +19,18 @@ interface SessionExerciseCardProps {
     exerciseId: string,
     setIndex: number,
     field: 'weight' | 'reps' | 'durationSeconds',
-    value: number
+    value: number | undefined
   ) => void
   onDeleteSet: (exerciseId: string, setIndex: number) => void
 }
 
-/** A single numeric Set field (weight, reps, or duration) with its unit label. */
+/**
+ * A single numeric Set field (weight, reps, or duration) with its unit label.
+ * An absent measurement renders as a genuinely empty input, never as 0 — that
+ * emptiness is what marks the Set as not yet performed (ADR-0004) — and clearing
+ * the field reports `undefined` rather than `Number('') === 0`, so a Set can be
+ * returned to Pending.
+ */
 function SetValueField({
   inputMode,
   value,
@@ -29,7 +40,7 @@ function SetValueField({
 }: {
   inputMode: 'decimal' | 'numeric'
   value: number | undefined
-  onChange: (value: number) => void
+  onChange: (value: number | undefined) => void
   ariaLabel: string
   unit: string
 }) {
@@ -38,8 +49,10 @@ function SetValueField({
       <Input
         type="number"
         inputMode={inputMode}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
+        value={value ?? ''}
+        onChange={(event) =>
+          onChange(event.target.value === '' ? undefined : Number(event.target.value))
+        }
         aria-label={ariaLabel}
         className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
       />
@@ -84,7 +97,14 @@ export function SessionExerciseCard({
                     groupIndex > 0 && memberIndex === 0 && 'mt-1 border-t border-border pt-3'
                   )}
                 >
-                  <span className="flex size-8 shrink-0 flex-col items-center justify-center rounded-md bg-muted font-mono text-sm text-muted-foreground tabular-nums">
+                  <span
+                    className={cn(
+                      'flex size-8 shrink-0 flex-col items-center justify-center rounded-md border font-mono text-sm tabular-nums',
+                      isSetLogged(liveExercise, set)
+                        ? 'border-transparent bg-muted text-foreground'
+                        : 'border-dashed border-muted-foreground/40 bg-transparent text-muted-foreground/70'
+                    )}
+                  >
                     {groupIndex + 1}
                     {set.side && (
                       <span className="text-[9px] leading-none font-semibold tracking-widest uppercase">

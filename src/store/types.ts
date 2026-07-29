@@ -45,8 +45,13 @@ export interface Workout {
 
 /**
  * side is present only on Sets logged against a unilateral Exercise; absent on plain Sets.
- * durationSeconds is present only on Sets logged against a timed Exercise, in which case
- * weight/reps are absent — the two shapes are mutually exclusive per Set.
+ *
+ * The measurement fields (weight, reps, durationSeconds) are present if and only
+ * if the Set was actually performed (ADR-0004) — a Set carrying none of them is a
+ * Pending Set. A weight of 0 is a real measurement (bodyweight work); an *absent*
+ * weight is what means "not performed". Which measurements a Set is expected to
+ * carry follows from its Exercise's isTimed flag, never from which fields happen
+ * to be present (ADR-0005).
  */
 export interface SessionSet {
   weight?: number
@@ -55,8 +60,23 @@ export interface SessionSet {
   side?: 'left' | 'right'
 }
 
-export function emptySet(): SessionSet {
-  return { weight: 0, reps: 0 }
+/**
+ * A Pending Set: present in a Session but not yet performed, so it carries no
+ * measurements at all (ADR-0004). `side` is added separately by logSet where the
+ * Exercise is unilateral — side is per-Set data, not a measurement.
+ */
+export function pendingSet(): SessionSet {
+  return {}
+}
+
+/** Strips measurement keys whose value is absent, so "not performed" is a missing key rather than an explicit undefined. */
+export function withoutAbsentMeasurements(set: SessionSet): SessionSet {
+  const cleaned: SessionSet = {}
+  if (set.side !== undefined) cleaned.side = set.side
+  if (set.weight !== undefined) cleaned.weight = set.weight
+  if (set.reps !== undefined) cleaned.reps = set.reps
+  if (set.durationSeconds !== undefined) cleaned.durationSeconds = set.durationSeconds
+  return cleaned
 }
 
 /**

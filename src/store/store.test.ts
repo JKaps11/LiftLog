@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   Store,
+  isSetLogged,
   resolveExerciseDisplayName,
-  emptySet,
+  pendingSet,
   EXERCISE_TYPES,
   MUSCLE_GROUPS,
   type Exercise,
@@ -552,8 +553,8 @@ describe('Store', () => {
       expect(session.workoutId).toBe(workout.id)
       expect(session.workoutNameSnapshot).toBe('Push Day')
       expect(session.exercises).toEqual([
-        { exerciseId: bench.id, exerciseNameAtLogTime: 'Bench Press', sets: [emptySet()] },
-        { exerciseId: ohp.id, exerciseNameAtLogTime: 'Overhead Press', sets: [emptySet()] },
+        { exerciseId: bench.id, exerciseNameAtLogTime: 'Bench Press', sets: [pendingSet()] },
+        { exerciseId: ohp.id, exerciseNameAtLogTime: 'Overhead Press', sets: [pendingSet()] },
       ])
       expect(session.startTime).toBeTruthy()
       expect(session.endTime).toBeNull()
@@ -576,11 +577,11 @@ describe('Store', () => {
           exerciseId: bench.id,
           exerciseNameAtLogTime: 'Bench Press',
           sets: [
-            emptySet(),
+            pendingSet(),
             { weight: 135, reps: 8 },
           ],
         },
-        { exerciseId: ohp.id, exerciseNameAtLogTime: 'Overhead Press', sets: [emptySet()] },
+        { exerciseId: ohp.id, exerciseNameAtLogTime: 'Overhead Press', sets: [pendingSet()] },
       ])
     })
 
@@ -599,7 +600,7 @@ describe('Store', () => {
           exerciseId: bench.id,
           exerciseNameAtLogTime: 'Bench Press',
           sets: [
-            emptySet(),
+            pendingSet(),
             { weight: 135, reps: 8 },
             { weight: 155, reps: 5 },
           ],
@@ -621,7 +622,7 @@ describe('Store', () => {
       const updated = await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
 
       expect(updated.exercises[0].sets).toEqual([
-        emptySet(),
+        pendingSet(),
         { weight: 135, reps: 8 },
       ])
     })
@@ -649,7 +650,7 @@ describe('Store', () => {
       const updated = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
 
       expect(updated.exercises[0].sets).toEqual([
-        emptySet(),
+        pendingSet(),
         { weight: 40, reps: 10, side: 'left' },
         { weight: 40, reps: 10, side: 'right' },
       ])
@@ -665,17 +666,17 @@ describe('Store', () => {
       expect(updated.exercises[0].sets.at(-1)).toEqual({ weight: 135, reps: 8 })
     })
 
-    it('appends a duration-only Set with no explicit set argument, for a timed Exercise', async () => {
+    it('appends a Pending Set for a timed Exercise, carrying no duration', async () => {
       const plank = await createExercise('Plank', { isTimed: true })
       const workout = await store.createWorkout('Core', [plank.id])
       const session = await store.startSession(workout.id)
 
       const updated = await store.logSet(session.id, plank.id)
 
-      expect(updated.exercises[0].sets.at(-1)).toEqual({ durationSeconds: 0 })
+      expect(updated.exercises[0].sets.at(-1)).toEqual({})
     })
 
-    it('appends a left+right pair of duration-only Sets for a timed and unilateral Exercise', async () => {
+    it('appends a Pending left+right pair for a timed and unilateral Exercise', async () => {
       const stretch = await createExercise('Single Leg Hamstring Stretch', { isUnilateral: true, isTimed: true })
       const workout = await store.createWorkout('Mobility', [stretch.id])
       const session = await store.startSession(workout.id)
@@ -683,34 +684,13 @@ describe('Store', () => {
       const updated = await store.logSet(session.id, stretch.id)
 
       expect(updated.exercises[0].sets).toEqual([
-        emptySet(),
-        { durationSeconds: 0, side: 'left' },
-        { durationSeconds: 0, side: 'right' },
+        pendingSet(),
+        { side: 'left' },
+        { side: 'right' },
       ])
     })
 
-    it('appends weight/reps Set with no explicit set argument, for a non-timed Exercise', async () => {
-      const bench = await createExercise('Bench Press')
-      const workout = await store.createWorkout('Push Day', [bench.id])
-      const session = await store.startSession(workout.id)
-
-      const updated = await store.logSet(session.id, bench.id)
-
-      expect(updated.exercises[0].sets.at(-1)).toEqual({ weight: 0, reps: 0 })
-    })
-
-    it('carries weight forward from the last Set when no explicit set argument is given, leaving reps at 0', async () => {
-      const bench = await createExercise('Bench Press')
-      const workout = await store.createWorkout('Push Day', [bench.id])
-      const session = await store.startSession(workout.id)
-      await store.logSet(session.id, bench.id, { weight: 135, reps: 8 })
-
-      const updated = await store.logSet(session.id, bench.id)
-
-      expect(updated.exercises[0].sets.at(-1)).toEqual({ weight: 135, reps: 0 })
-    })
-
-    it('carries duration forward from the last Set when no explicit set argument is given, for a timed Exercise', async () => {
+    it('does not carry a duration forward into an added Set for a timed Exercise', async () => {
       const plank = await createExercise('Plank', { isTimed: true })
       const workout = await store.createWorkout('Core', [plank.id])
       const session = await store.startSession(workout.id)
@@ -718,10 +698,10 @@ describe('Store', () => {
 
       const updated = await store.logSet(session.id, plank.id)
 
-      expect(updated.exercises[0].sets.at(-1)).toEqual({ durationSeconds: 45 })
+      expect(updated.exercises[0].sets.at(-1)).toEqual({})
     })
 
-    it('carries weight forward per side into an added pair, for a unilateral Exercise with an asymmetric load', async () => {
+    it('does not carry an asymmetric load forward per side into an added pair', async () => {
       const row = await createExercise('Single Arm Row', { isUnilateral: true })
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
@@ -730,13 +710,10 @@ describe('Store', () => {
 
       const updated = await store.logSet(session.id, row.id)
 
-      expect(updated.exercises[0].sets.slice(-2)).toEqual([
-        { weight: 40, reps: 0, side: 'left' },
-        { weight: 35, reps: 0, side: 'right' },
-      ])
+      expect(updated.exercises[0].sets.slice(-2)).toEqual([{ side: 'left' }, { side: 'right' }])
     })
 
-    it('falls back to a zeroed Set when the Exercise has no Sets left to carry from', async () => {
+    it('appends a Pending Set when the Exercise has no Sets left at all', async () => {
       const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
       const session = await store.startSession(workout.id)
@@ -746,10 +723,10 @@ describe('Store', () => {
 
       const updated = await store.logSet(session.id, bench.id)
 
-      expect(updated.exercises[0].sets).toEqual([{ weight: 0, reps: 0 }])
+      expect(updated.exercises[0].sets).toEqual([{}])
     })
 
-    it('falls back to zeroed Sets when the preceding Sets predate the Exercise becoming unilateral', async () => {
+    it('appends a Pending pair when the preceding Sets predate the Exercise becoming unilateral', async () => {
       const curl = await createExercise('Bicep Curl', { isUnilateral: false })
       const workout = await store.createWorkout('Arms', [curl.id])
       const session = await store.startSession(workout.id)
@@ -758,10 +735,7 @@ describe('Store', () => {
 
       const updated = await store.logSet(session.id, curl.id)
 
-      expect(updated.exercises[0].sets.slice(-2)).toEqual([
-        { weight: 0, reps: 0, side: 'left' },
-        { weight: 0, reps: 0, side: 'right' },
-      ])
+      expect(updated.exercises[0].sets.slice(-2)).toEqual([{ side: 'left' }, { side: 'right' }])
     })
   })
 
@@ -775,7 +749,7 @@ describe('Store', () => {
       const updated = await store.updateSet(logged.id, bench.id, 1, { weight: 145, reps: 6 })
 
       expect(updated.exercises[0].sets).toEqual([
-        emptySet(),
+        pendingSet(),
         { weight: 145, reps: 6 },
       ])
     })
@@ -922,7 +896,7 @@ describe('Store', () => {
       const updated = await store.deleteSet(logged.id, bench.id, 1)
 
       expect(updated.exercises[0].sets).toEqual([
-        emptySet(),
+        pendingSet(),
         { weight: 145, reps: 6 },
       ])
     })
@@ -944,10 +918,10 @@ describe('Store', () => {
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
-      // sets: [emptySet(), left, right] -> left is index 1
+      // sets: [pendingSet(), left, right] -> left is index 1
       const updated = await store.deleteSet(logged.id, row.id, 1)
 
-      expect(updated.exercises[0].sets).toEqual([emptySet()])
+      expect(updated.exercises[0].sets).toEqual([pendingSet()])
     })
 
     it('deleting the right Set of a unilateral pair removes both', async () => {
@@ -955,10 +929,10 @@ describe('Store', () => {
       const workout = await store.createWorkout('Pull Day', [row.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
-      // sets: [emptySet(), left, right] -> right is index 2
+      // sets: [pendingSet(), left, right] -> right is index 2
       const updated = await store.deleteSet(logged.id, row.id, 2)
 
-      expect(updated.exercises[0].sets).toEqual([emptySet()])
+      expect(updated.exercises[0].sets).toEqual([pendingSet()])
     })
 
     it('deleting either Set of a timed+unilateral pair removes both', async () => {
@@ -966,10 +940,10 @@ describe('Store', () => {
       const workout = await store.createWorkout('Mobility', [stretch.id])
       const session = await store.startSession(workout.id)
       const logged = await store.logSet(session.id, stretch.id)
-      // sets: [emptySet(), left, right] -> left is index 1
+      // sets: [pendingSet(), left, right] -> left is index 1
       const updated = await store.deleteSet(logged.id, stretch.id, 1)
 
-      expect(updated.exercises[0].sets).toEqual([emptySet()])
+      expect(updated.exercises[0].sets).toEqual([pendingSet()])
     })
 
     it('deleting one pair leaves other Sets/pairs intact and in order', async () => {
@@ -978,11 +952,11 @@ describe('Store', () => {
       const session = await store.startSession(workout.id)
       await store.logSet(session.id, row.id, { weight: 40, reps: 10 })
       const logged = await store.logSet(session.id, row.id, { weight: 45, reps: 8 })
-      // sets: [emptySet(), left1, right1, left2, right2] -> delete the second pair at index 3
+      // sets: [pendingSet(), left1, right1, left2, right2] -> delete the second pair at index 3
       const updated = await store.deleteSet(logged.id, row.id, 3)
 
       expect(updated.exercises[0].sets).toEqual([
-        emptySet(),
+        pendingSet(),
         { weight: 40, reps: 10, side: 'left' },
         { weight: 40, reps: 10, side: 'right' },
       ])
@@ -1000,7 +974,7 @@ describe('Store', () => {
 
       const reloaded = await store.getLastSessionForWorkout(workout.id)
       expect(reloaded?.id).toBe(logged.id)
-      expect(reloaded?.exercises[0].sets).toEqual([emptySet(), { weight: 40, reps: 10 }])
+      expect(reloaded?.exercises[0].sets).toEqual([pendingSet(), { weight: 40, reps: 10 }])
     })
 
     it('leaves paired Sets unmodified after the Exercise is later un-flagged as unilateral', async () => {
@@ -1014,7 +988,7 @@ describe('Store', () => {
       const reloaded = await store.getLastSessionForWorkout(workout.id)
       expect(reloaded?.id).toBe(logged.id)
       expect(reloaded?.exercises[0].sets).toEqual([
-        emptySet(),
+        pendingSet(),
         { weight: 40, reps: 10, side: 'left' },
         { weight: 40, reps: 10, side: 'right' },
       ])
@@ -1032,7 +1006,7 @@ describe('Store', () => {
 
       const reloaded = await store.getLastSessionForWorkout(workout.id)
       expect(reloaded?.id).toBe(logged.id)
-      expect(reloaded?.exercises[0].sets).toEqual([emptySet(), { weight: 0, reps: 30 }])
+      expect(reloaded?.exercises[0].sets).toEqual([pendingSet(), { weight: 0, reps: 30 }])
     })
 
     it('leaves a duration Set unmodified after its Exercise is later un-flagged as timed', async () => {
@@ -1045,7 +1019,7 @@ describe('Store', () => {
 
       const reloaded = await store.getLastSessionForWorkout(workout.id)
       expect(reloaded?.id).toBe(logged.id)
-      expect(reloaded?.exercises[0].sets).toEqual([emptySet(), { durationSeconds: 45 }])
+      expect(reloaded?.exercises[0].sets).toEqual([pendingSet(), { durationSeconds: 45 }])
     })
   })
 
@@ -1179,6 +1153,136 @@ describe('Store', () => {
       expect(exported.exercises).toEqual([])
       expect(exported.workouts).toEqual([])
       expect(exported.sessions).toEqual([])
+    })
+  })
+
+  describe('Pending Sets', () => {
+    it('appends a Pending Set carrying no measurements at all from the "Add set" path', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, bench.id)
+
+      expect(updated.exercises[0].sets.at(-1)).toEqual({})
+    })
+
+    it('does not carry a weight forward into an added Set, so an added Set never reads as performed', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 135, reps: 8 })
+
+      const updated = await store.logSet(session.id, bench.id)
+
+      expect(updated.exercises[0].sets.at(-1)).toEqual({})
+    })
+
+    it('appends a Pending left+right pair for a unilateral Exercise', async () => {
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, row.id)
+
+      expect(updated.exercises[0].sets.slice(-2)).toEqual([{ side: 'left' }, { side: 'right' }])
+    })
+
+    it('appends the same Pending Set for a timed Exercise as for a weighted one (layout comes from the Exercise, ADR-0005)', async () => {
+      const plank = await createExercise('Plank', { isTimed: true })
+      const workout = await store.createWorkout('Core', [plank.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.logSet(session.id, plank.id)
+
+      expect(updated.exercises[0].sets.at(-1)).toEqual({})
+    })
+
+    it('clears a measurement back to absent, returning a Logged Set to Pending', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 135, reps: 8 })
+
+      const updated = await store.updateSet(session.id, bench.id, 0, {
+        weight: undefined,
+        reps: undefined,
+      })
+
+      expect(updated.exercises[0].sets[0]).toEqual({})
+      expect('weight' in updated.exercises[0].sets[0]).toBe(false)
+    })
+
+    it('preserves a Set’s side when its measurements are cleared', async () => {
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, row.id)
+      await store.updateSet(session.id, row.id, 1, { weight: 40, reps: 10, side: 'left' })
+
+      const updated = await store.updateSet(session.id, row.id, 1, {
+        weight: undefined,
+        reps: undefined,
+        side: 'left',
+      })
+
+      expect(updated.exercises[0].sets[1]).toEqual({ side: 'left' })
+    })
+
+    it('treats a stored weight of 0 as a real measurement, not an absent one', async () => {
+      const pullup = await createExercise('Pull Up')
+      const workout = await store.createWorkout('Pull Day', [pullup.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.updateSet(session.id, pullup.id, 0, { weight: 0, reps: 12 })
+
+      expect(updated.exercises[0].sets[0]).toEqual({ weight: 0, reps: 12 })
+    })
+  })
+
+  describe('isSetLogged', () => {
+    const weighted: Exercise = {
+      id: 'ex-1',
+      name: 'Bench Press',
+      isUnilateral: false,
+      isTimed: false,
+      primaryMuscleGroup: 'chest',
+      otherMuscleGroups: [],
+      type: 'strength',
+    }
+    const timed: Exercise = { ...weighted, id: 'ex-2', name: 'Plank', isTimed: true }
+
+    it('counts a weighted Set as Logged only once both weight and reps are present', () => {
+      expect(isSetLogged(weighted, { weight: 135, reps: 8 })).toBe(true)
+      expect(isSetLogged(weighted, { weight: 135 })).toBe(false)
+      expect(isSetLogged(weighted, { reps: 8 })).toBe(false)
+      expect(isSetLogged(weighted, {})).toBe(false)
+    })
+
+    it('counts a weight of 0 as Logged, since bodyweight work is a real measurement', () => {
+      expect(isSetLogged(weighted, { weight: 0, reps: 12 })).toBe(true)
+    })
+
+    it('counts 0 reps as Logged, distinguishing a failed Set from an unperformed one', () => {
+      expect(isSetLogged(weighted, { weight: 135, reps: 0 })).toBe(true)
+    })
+
+    it('counts a timed Set as Logged on its duration alone', () => {
+      expect(isSetLogged(timed, { durationSeconds: 60 })).toBe(true)
+      expect(isSetLogged(timed, { durationSeconds: 0 })).toBe(true)
+      expect(isSetLogged(timed, {})).toBe(false)
+    })
+
+    it('ignores measurements the Exercise does not imply', () => {
+      expect(isSetLogged(timed, { weight: 135, reps: 8 })).toBe(false)
+      expect(isSetLogged(weighted, { durationSeconds: 60 })).toBe(false)
+    })
+
+    it('falls back to any measurement being present when the Exercise has been deleted', () => {
+      expect(isSetLogged(undefined, { weight: 135, reps: 8 })).toBe(true)
+      expect(isSetLogged(undefined, { durationSeconds: 60 })).toBe(true)
+      expect(isSetLogged(undefined, {})).toBe(false)
+      expect(isSetLogged(undefined, { side: 'left' })).toBe(false)
     })
   })
 

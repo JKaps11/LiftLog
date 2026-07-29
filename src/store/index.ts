@@ -1,6 +1,6 @@
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
 import type { EntityTable } from './table'
-import { emptySet, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
+import { pendingSet, withoutAbsentMeasurements, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
 import type {
   Exercise,
   ExerciseType,
@@ -27,7 +27,7 @@ function parseExerciseType(value: string): ExerciseType {
   return value as ExerciseType
 }
 
-export { emptySet, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
+export { pendingSet, withoutAbsentMeasurements, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
 export type {
   Exercise,
   ExerciseType,
@@ -71,40 +71,23 @@ export function resolveExerciseDisplayName(
 }
 
 /**
- * The Set a newly added Set carries its load from — the last logical Set,
- * meaning the matching half of the final left+right pair when adding to a
- * unilateral Exercise, or the final Set alone when adding a plain Set. The
- * look-back is deliberately exactly one logical Set, never a scan back through
- * the list: whatever is at the end is what the lifter just did.
+ * Whether a Set records work actually performed, as opposed to a Pending Set
+ * awaiting its numbers (ADR-0004). Which measurements are required follows from
+ * the Exercise, never from which fields happen to be present (ADR-0005): a timed
+ * Exercise needs a duration, anything else needs both weight and reps. Zero is a
+ * real measurement — bodyweight work is `weight: 0`, and a failed Set is
+ * `reps: 0` — so absence, not falsiness, is the test.
  *
- * Requesting a side when the list doesn't end in a pair (e.g. plain Sets logged
- * before isUnilateral was turned on) yields nothing, so the new pair falls back
- * to zeroes rather than guessing a side. Pair adjacency is the same invariant
- * logSet/deleteSet rely on.
+ * Falls back to "carries any measurement" when the Exercise has been deleted,
+ * mirroring resolveExerciseDisplayName.
  */
-function lastLoggedSet(sets: SessionSet[], side?: 'left' | 'right'): SessionSet | undefined {
-  const last = sets.at(-1)
-  if (!side) return last
-
-  const beforeLast = sets.at(-2)
-  if (beforeLast?.side !== 'left' || last?.side !== 'right') return undefined
-  return side === 'left' ? beforeLast : last
-}
-
-/**
- * Builds the Set that "Add set" appends, carrying the *load* forward from the
- * preceding Set — weight for a weighted Exercise, duration for a timed one —
- * because the bar is already loaded and the hold time is a target you dial in.
- * Reps are deliberately NOT carried: the rep count is the outcome you're
- * pushing set to set, so it changes nearly every time, and a prefilled count
- * you forget to correct silently records a lift that never happened. Starting a
- * Session is different — see startSession, which clones the previous Session's
- * full grid, reps included, as the performance to beat.
- */
-function carryLoadForward(previous: SessionSet | undefined, isTimed: boolean): SessionSet {
-  return isTimed
-    ? { durationSeconds: previous?.durationSeconds ?? 0 }
-    : { weight: previous?.weight ?? 0, reps: 0 }
+export function isSetLogged(exercise: Exercise | undefined, set: SessionSet): boolean {
+  if (!exercise) {
+    return set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
+  }
+  return exercise.isTimed
+    ? set.durationSeconds !== undefined
+    : set.weight !== undefined && set.reps !== undefined
 }
 
 export class Store {
@@ -310,7 +293,7 @@ export class Store {
         const exercise = await this.exercises.get(exerciseId)
         if (!exercise) return null
         const priorSets = lastSession?.exercises.find((entry) => entry.exerciseId === exerciseId)
-          ?.sets ?? [emptySet()]
+          ?.sets ?? [pendingSet()]
         return {
           exerciseId,
           exerciseNameAtLogTime: exercise.name,
@@ -338,10 +321,15 @@ export class Store {
   /**
    * Against a unilateral Exercise (checked live by exerciseId), appends a
    * left+right pair of Sets in one call instead of a single Set. When `set` is
-   * omitted (the "Add set" path), the new Set is constructed live from the
-   * Exercise's current isTimed flag and carries the load forward from the
-   * Session's last logical Set (see carryLoadForward), rather than the caller
-   * needing to know which shape to build or what to prefill.
+   * omitted (the "Add set" path) the new Set is Pending — no measurements at all
+   * — so an added Set never reads as already performed.
+   *
+   * Nothing is carried forward into it. This supersedes the previous
+   * carry-the-weight-forward behavior, which existed to avoid retyping the load
+   * but deliberately withheld reps because "a prefilled count you forget to
+   * correct silently records a lift that never happened". Ghost Values solve that
+   * properly: last Session's numbers are shown as placeholders and can be
+   * accepted in one tap, without any of them being stored until they are.
    */
   async logSet(sessionId: string, exerciseId: string, set?: SessionSet): Promise<Session> {
     const session = await this.requireSession(sessionId)
@@ -351,13 +339,11 @@ export class Store {
     }
 
     const exercise = await this.exercises.get(exerciseId)
-    const isTimed = exercise?.isTimed ?? false
     const isUnilateral = exercise?.isUnilateral ?? false
 
-    const logged = entry.sets
     function build(side?: 'left' | 'right'): SessionSet {
-      const base = set ?? carryLoadForward(lastLoggedSet(logged, side), isTimed)
-      return side ? { ...base, side } : { ...base }
+      const base = set ?? pendingSet()
+      return withoutAbsentMeasurements(side ? { ...base, side } : { ...base })
     }
     const newSets: SessionSet[] = isUnilateral ? [build('left'), build('right')] : [build()]
 
@@ -384,7 +370,10 @@ export class Store {
 
     const exercises = session.exercises.map((e) =>
       e.exerciseId === exerciseId
-        ? { ...e, sets: e.sets.map((s, i) => (i === setIndex ? { ...set } : s)) }
+        ? {
+            ...e,
+            sets: e.sets.map((s, i) => (i === setIndex ? withoutAbsentMeasurements(set) : s)),
+          }
         : e
     )
     const updated: Session = { ...session, exercises }

@@ -15,7 +15,7 @@ export function useSessionEditing(session: Session, onChange: (session: Session)
     exerciseId: string,
     setIndex: number,
     field: 'weight' | 'reps' | 'durationSeconds',
-    value: number
+    value: number | undefined
   ) {
     const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
     const current = entry?.sets[setIndex]
