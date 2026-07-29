@@ -10,6 +10,8 @@ import { acceptGhostValues, resolveGhostSets, resolveSetRow, type SetField } fro
 interface SessionExerciseCardProps {
   entry: SessionExerciseEntry
   exercises: Exercise[]
+  /** The Sets performed the last time this Exercise was Logged in this Workout — the Ghost Value source. */
+  carriedSets?: SessionSet[]
   onAddSet: (exerciseId: string) => void
   onSetChange: (
     exerciseId: string,
@@ -91,6 +93,7 @@ function SetValueField({
 export function SessionExerciseCard({
   entry,
   exercises,
+  carriedSets,
   onAddSet,
   onSetChange,
   onSetReplace,
@@ -99,7 +102,7 @@ export function SessionExerciseCard({
   const displayName = resolveExerciseDisplayName(exercises, entry)
   const liveExercise = exercises.find((exercise) => exercise.id === entry.exerciseId)
   const groups = groupSessionSets(entry.sets)
-  const ghosts = resolveGhostSets(entry.sets, liveExercise)
+  const ghosts = resolveGhostSets(entry.sets, liveExercise, carriedSets)
 
   function sideLetter(side: 'left' | 'right') {
     return side === 'left' ? 'L' : 'R'

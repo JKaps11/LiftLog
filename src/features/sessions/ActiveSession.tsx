@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { PageHeading } from '@/components/ui/page-heading'
 import { SectionLabel } from '@/components/ui/section-label'
-import type { Exercise, Session } from '@/store'
+import { store } from '@/store/instance'
+import type { Exercise, Session, SessionSet } from '@/store'
 import { SessionExerciseCard } from './SessionExerciseCard'
 import { useSessionEditing } from './useSessionEditing'
 
@@ -24,6 +26,24 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
   } =
     useSessionEditing(session, onChange)
 
+  /**
+   * Ghost Values for the whole Workout, fetched once per Session rather than per
+   * Set. Keyed by exerciseId and read live from history (ADR-0004), so it depends
+   * only on the Session's identity — not on the Sets being logged into it, which
+   * would refetch on every keystroke.
+   */
+  const [carriedSets, setCarriedSets] = useState<Record<string, SessionSet[]>>({})
+
+  useEffect(() => {
+    let stale = false
+    void store.getCarriedOverSets(session.id).then((carried) => {
+      if (!stale) setCarriedSets(carried)
+    })
+    return () => {
+      stale = true
+    }
+  }, [session.id])
+
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
       <PageHeading>{session.workoutNameSnapshot}</PageHeading>
@@ -37,6 +57,7 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
               key={entry.exerciseId}
               entry={entry}
               exercises={exercises}
+              carriedSets={carriedSets[entry.exerciseId]}
               onAddSet={handleAddSet}
               onSetChange={handleSetChange}
               onSetReplace={handleSetReplace}

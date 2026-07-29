@@ -1,5 +1,5 @@
 import { isSetLogged, withoutAbsentMeasurements, type Exercise, type SessionSet } from '@/store'
-import { groupSessionSets } from './sessionSetGrouping'
+import { groupSessionSets, type SessionSetGroup } from './sessionSetGrouping'
 
 /** Which measurement fields a Set row shows: a single duration, or weight x reps. */
 export type SetLayout = 'timed' | 'weighted'
@@ -32,41 +32,54 @@ export function resolveSetLayout(exercise: Exercise | undefined, set: SessionSet
   return set.durationSeconds !== undefined ? 'timed' : 'weighted'
 }
 
+/** Picks the Set within a source group that should hint `set` — the same side where both are pairs, otherwise the group's first. */
+function hintFor(
+  source: SessionSetGroup | undefined,
+  set: SessionSet
+): SessionSet | undefined {
+  if (!source) return undefined
+  const bySide = set.side
+    ? source.sets.find((candidate) => candidate.set.side === set.side)
+    : undefined
+  return (bySide ?? source.sets[0]).set
+}
+
 /**
  * The Ghost Value source for each Set in an Exercise's list, indexed in step
- * with `sets`. Within a Session, a Pending Set is hinted by the last Set the
- * lifter actually Logged *before* it — not after, so a Set logged later out of
- * order never suggests itself backwards.
+ * with `sets`.
  *
- * Sides are matched across pairs so the left hand hints the left hand. When the
- * source is a solo Set and the target a pair (Sets logged before the Exercise
- * became unilateral), both sides fall back to that solo Set: an approximate hint
- * beats none, and a Ghost Value is never stored, so a wrong guess costs nothing.
+ * A Pending Set's hint is its counterpart in `carriedSets` — the Sets performed
+ * the last time this Exercise was Logged in this Workout. A Set added beyond that
+ * count has no counterpart, so it falls back to the last Set Logged *earlier in
+ * this Session*; not later, so a Set logged out of order never suggests itself
+ * backwards.
+ *
+ * Sides are matched across pairs so the left hand hints the left hand. Where the
+ * source is a solo Set and the target a pair (history predating the Exercise
+ * becoming unilateral), both sides fall back to that solo Set: an approximate
+ * hint beats none, and a Ghost Value is never stored, so a wrong guess costs
+ * nothing but a glance.
  */
 export function resolveGhostSets(
   sets: SessionSet[],
-  exercise: Exercise | undefined
+  exercise: Exercise | undefined,
+  carriedSets: SessionSet[] = []
 ): Array<SessionSet | undefined> {
   const groups = groupSessionSets(sets)
+  const carriedGroups = groupSessionSets(carriedSets)
   const ghosts = new Array<SessionSet | undefined>(sets.length).fill(undefined)
 
-  let lastLogged: { sets: Array<{ index: number; set: SessionSet }> } | undefined
-  for (const group of groups) {
-    const allLogged = group.sets.every(({ set }) => isSetLogged(exercise, set))
-    if (allLogged) {
+  let lastLogged: SessionSetGroup | undefined
+  groups.forEach((group, groupIndex) => {
+    if (group.sets.every(({ set }) => isSetLogged(exercise, set))) {
       lastLogged = group
-      continue
+      return
     }
-    if (!lastLogged) continue
-
     for (const { index, set } of group.sets) {
       if (isSetLogged(exercise, set)) continue
-      const bySide = set.side
-        ? lastLogged.sets.find((candidate) => candidate.set.side === set.side)
-        : undefined
-      ghosts[index] = (bySide ?? lastLogged.sets[0]).set
+      ghosts[index] = hintFor(carriedGroups[groupIndex], set) ?? hintFor(lastLogged, set)
     }
-  }
+  })
   return ghosts
 }
 

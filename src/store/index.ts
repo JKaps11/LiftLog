@@ -81,6 +81,59 @@ export function resolveExerciseDisplayName(
  * Falls back to "carries any measurement" when the Exercise has been deleted,
  * mirroring resolveExerciseDisplayName.
  */
+/** Whether a Set carries any measurement at all — the weakest sense of "was performed", used where the Exercise isn't at hand. */
+function carriesMeasurement(set: SessionSet): boolean {
+  return set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
+}
+
+/**
+ * The Sets most recently performed for one Exercise, looked back through a
+ * Workout's Sessions newest-first. Per-Exercise rather than per-Session because
+ * untouched Sets are pruned at End Session: an Exercise skipped last week has no
+ * Sets there to take a shape from, and the week before is the honest answer.
+ */
+function lastLoggedSetsForExercise(
+  newestFirst: Session[],
+  exerciseId: string
+): SessionSet[] | undefined {
+  for (const session of newestFirst) {
+    const sets = session.exercises
+      .find((entry) => entry.exerciseId === exerciseId)
+      ?.sets.filter(carriesMeasurement)
+    if (sets?.length) return sets
+  }
+  return undefined
+}
+
+/** How many logical Sets a list represents — a left+right pair counts once. */
+function countSetGroups(sets: SessionSet[] | undefined): number {
+  if (!sets?.length) return 1
+
+  let groups = 0
+  for (let i = 0; i < sets.length; i++) {
+    if (sets[i].side === 'left' && sets[i + 1]?.side === 'right') i++
+    groups++
+  }
+  return groups
+}
+
+/**
+ * Builds `groups` logical Sets, all Pending. The count comes from history but
+ * solo-vs-pair comes from the Exercise as it is configured now, consistent with
+ * ADR-0005 — flipping an Exercise to unilateral should change how today's Sets
+ * materialize rather than carrying a stale pattern forward.
+ */
+function materializePendingSets(groups: number, isUnilateral: boolean): SessionSet[] {
+  return Array.from({ length: groups }, () =>
+    isUnilateral
+      ? [
+          { ...pendingSet(), side: 'left' as const },
+          { ...pendingSet(), side: 'right' as const },
+        ]
+      : [pendingSet()]
+  ).flat()
+}
+
 export function isSetLogged(exercise: Exercise | undefined, set: SessionSet): boolean {
   if (!exercise) {
     return set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
@@ -274,9 +327,13 @@ export class Store {
   /**
    * Snapshots the Workout's current name and Exercise list into the new
    * Session (ADR-0001) and denormalizes each Exercise's current name for
-   * defensive display in case the Exercise is later deleted. Each Exercise's
-   * Sets pre-fill from the most recent prior Session for this Workout, or
-   * start with a single empty set if there is none.
+   * defensive display in case the Exercise is later deleted.
+   *
+   * Each Exercise opens as Pending Sets carrying no measurements (ADR-0004): the
+   * *shape* of last time's work is carried over — how many Sets, and solo or
+   * left/right pair — while the numbers are not, so nothing on screen claims to
+   * have been performed. Last time's numbers surface separately as Ghost Values,
+   * see getCarriedOverSets.
    *
    * An exerciseId with no Exercise behind it is skipped rather than snapshotted
    * — the denormalized name would be the raw uuid, and a Session is permanent,
@@ -286,18 +343,17 @@ export class Store {
     const workout = await this.workouts.get(workoutId)
     if (!workout) throw new Error(`Workout not found: ${workoutId}`)
 
-    const lastSession = await this.getLastSessionForWorkout(workoutId)
+    const history = await this.sessionsForWorkout(workoutId)
 
     const resolved = await Promise.all(
       workout.exerciseIds.map(async (exerciseId) => {
         const exercise = await this.exercises.get(exerciseId)
         if (!exercise) return null
-        const priorSets = lastSession?.exercises.find((entry) => entry.exerciseId === exerciseId)
-          ?.sets ?? [pendingSet()]
+        const carried = lastLoggedSetsForExercise(history, exerciseId)
         return {
           exerciseId,
           exerciseNameAtLogTime: exercise.name,
-          sets: priorSets.map((set) => ({ ...set })),
+          sets: materializePendingSets(countSetGroups(carried), exercise.isUnilateral),
         }
       })
     )
@@ -416,10 +472,39 @@ export class Store {
     return updated
   }
 
-  async getLastSessionForWorkout(workoutId: string): Promise<Session | undefined> {
+  /** This Workout's Sessions, newest first, optionally excluding one — used to look back for Carried-Over Shape and Ghost Values. */
+  private async sessionsForWorkout(workoutId: string, excludeId?: string): Promise<Session[]> {
     const all = await this.sessions.toArray()
-    const forWorkout = all.filter((session) => session.workoutId === workoutId)
-    return sortByStartTimeDescending(forWorkout)[0]
+    const forWorkout = all.filter(
+      (session) => session.workoutId === workoutId && session.id !== excludeId
+    )
+    return sortByStartTimeDescending(forWorkout)
+  }
+
+  /**
+   * The Ghost Value source for each Exercise in a Session, keyed by exerciseId:
+   * the Sets most recently performed for that Exercise in this Workout, looked
+   * back per-Exercise so one skipped week doesn't erase the reference numbers.
+   *
+   * Excludes the given Session so an in-progress Session never ghosts from
+   * itself. Scoped to the same Workout deliberately — Exercise history spans
+   * every Workout for progress-tracking, but a hint must be contextual, and a
+   * heavy Bench Press on Push Day shouldn't suggest itself during Full Body.
+   *
+   * Read live while the Session is open rather than snapshotted, which does not
+   * conflict with ADR-0001: a Ghost Value is a transient hint and is never
+   * persisted. Editing an old Session mid-workout does shift today's hints.
+   */
+  async getCarriedOverSets(sessionId: string): Promise<Record<string, SessionSet[]>> {
+    const session = await this.requireSession(sessionId)
+    const history = await this.sessionsForWorkout(session.workoutId, sessionId)
+
+    const carried: Record<string, SessionSet[]> = {}
+    for (const entry of session.exercises) {
+      const sets = lastLoggedSetsForExercise(history, entry.exerciseId)
+      if (sets) carried[entry.exerciseId] = sets
+    }
+    return carried
   }
 
   /**

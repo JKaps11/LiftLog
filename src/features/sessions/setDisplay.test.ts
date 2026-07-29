@@ -194,3 +194,65 @@ describe('acceptGhostValues', () => {
     expect(acceptGhostValues(exercise(), {}, { weight: 135 })).toEqual({ weight: 135 })
   })
 })
+
+describe('resolveGhostSets (carried over from a previous Session)', () => {
+  it('ghosts each Set group from the matching group of the previous Session', () => {
+    const carried = [
+      { weight: 135, reps: 8 },
+      { weight: 135, reps: 6 },
+    ]
+    const ghosts = resolveGhostSets([{}, {}], exercise(), carried)
+    expect(ghosts[0]).toEqual({ weight: 135, reps: 8 })
+    expect(ghosts[1]).toEqual({ weight: 135, reps: 6 })
+  })
+
+  it('matches left to left and right to right against a carried pair', () => {
+    const unilateral = exercise({ isUnilateral: true })
+    const carried = [
+      { weight: 40, reps: 10, side: 'left' as const },
+      { weight: 35, reps: 10, side: 'right' as const },
+    ]
+    const ghosts = resolveGhostSets(
+      [{ side: 'left' as const }, { side: 'right' as const }],
+      unilateral,
+      carried
+    )
+    expect(ghosts[0]).toEqual({ weight: 40, reps: 10, side: 'left' })
+    expect(ghosts[1]).toEqual({ weight: 35, reps: 10, side: 'right' })
+  })
+
+  it('ghosts both sides of a Pending pair from a carried solo Set', () => {
+    const unilateral = exercise({ isUnilateral: true })
+    const ghosts = resolveGhostSets(
+      [{ side: 'left' as const }, { side: 'right' as const }],
+      unilateral,
+      [{ weight: 30, reps: 10 }]
+    )
+    expect(ghosts[0]).toEqual({ weight: 30, reps: 10 })
+    expect(ghosts[1]).toEqual({ weight: 30, reps: 10 })
+  })
+
+  it('falls back to this Session’s last Logged Set for a Set added beyond the carried count', () => {
+    const sets = [{ weight: 145, reps: 8 }, {}]
+    const ghosts = resolveGhostSets(sets, exercise(), [{ weight: 135, reps: 8 }])
+    expect(ghosts[1]).toEqual({ weight: 145, reps: 8 })
+  })
+
+  it('prefers the carried counterpart over this Session’s last Logged Set', () => {
+    const sets = [{ weight: 145, reps: 8 }, {}]
+    const carried = [
+      { weight: 135, reps: 8 },
+      { weight: 135, reps: 6 },
+    ]
+    expect(resolveGhostSets(sets, exercise(), carried)[1]).toEqual({ weight: 135, reps: 6 })
+  })
+
+  it('offers no Ghost Value where neither a carried counterpart nor a Logged Set exists', () => {
+    expect(resolveGhostSets([{}, {}], exercise(), [])).toEqual([undefined, undefined])
+  })
+
+  it('ghosts a carried duration for a timed Exercise', () => {
+    const ghosts = resolveGhostSets([{}], exercise({ isTimed: true }), [{ durationSeconds: 60 }])
+    expect(ghosts[0]).toEqual({ durationSeconds: 60 })
+  })
+})
