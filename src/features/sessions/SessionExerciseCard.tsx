@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { resolveExerciseDisplayName, type Exercise, type SessionExerciseEntry } from '@/store'
 import { groupSessionSets } from './sessionSetGrouping'
+import { resolveSetLayout } from './setDisplay'
 
 interface SessionExerciseCardProps {
   entry: SessionExerciseEntry
@@ -58,6 +59,7 @@ export function SessionExerciseCard({
   onDeleteSet,
 }: SessionExerciseCardProps) {
   const displayName = resolveExerciseDisplayName(exercises, entry)
+  const liveExercise = exercises.find((exercise) => exercise.id === entry.exerciseId)
   const groups = groupSessionSets(entry.sets)
 
   function sideLetter(side: 'left' | 'right') {
@@ -90,7 +92,7 @@ export function SessionExerciseCard({
                       </span>
                     )}
                   </span>
-                  {set.durationSeconds !== undefined ? (
+                  {resolveSetLayout(liveExercise, set) === 'timed' ? (
                     <SetValueField
                       inputMode="numeric"
                       value={set.durationSeconds}

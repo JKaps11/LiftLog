@@ -2,6 +2,8 @@ Status: ready-for-agent
 
 # Timed Exercises — Spec
 
+> **Partly superseded by ADR-0005 and `.scratch/pending-sets/spec.md`.** This spec's decision that a Set's rendering is driven by the presence of `durationSeconds` on the Set rather than by the Exercise's current `isTimed` value — and user story 7, which depends on it — has been reversed. Rendering now derives from the live Exercise. Everything else here still stands.
+
 ## Problem Statement
 
 Some Exercises aren't measured by weight/reps at all — mobility work, stretches, and static holds (Plank, Wall Sit, a hamstring stretch) are measured by how long they're held. Today the app has no way to mark an Exercise as timed, and every Set requires a weight and rep count, which is meaningless for this kind of work. Logging a stretch currently means either faking a weight/rep pair or not tracking it in the app at all.
