@@ -20,6 +20,14 @@ _Avoid_: Movement, lift
 One completed unit of an Exercise within a Session, recording the weight and reps performed. A Session logs one or more Sets per Exercise.
 _Avoid_: Rep (a Rep is a single repetition within a Set, not the Set itself)
 
+**Logical Set**:
+One Set as the lifter counts it: a single Set for an ordinary Exercise, or the left+right pair for a unilateral one. A unilateral Logical Set is numbered as one Set even though it records two performances.
+_Avoid_: Set pair, set group, superset (a Superset is unrelated — two different Exercises alternated)
+
+**Load**:
+What an Exercise is performed at, chosen before the Set is done — weight for an ordinary Exercise, hold duration for a timed one. Distinct from Reps, which is the outcome of having done the Set rather than a setting dialed in beforehand.
+_Avoid_: Intensity, resistance, effort (and never count Reps as part of the Load)
+
 **Primary Muscle Group**:
 The single required body-part an Exercise is grouped/browsed by, at fine anatomical granularity (Chest, Back, Shoulders, Biceps, Triceps, Forearms, Quads, Hamstrings, Glutes, Calves, Core, Neck). Every Exercise, including Stretches and Mobility drills, has exactly one.
 _Avoid_: Muscle Group, Body part, Category (always say "Primary" to distinguish from Other Muscle Groups)
