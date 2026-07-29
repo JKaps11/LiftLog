@@ -771,6 +771,91 @@ describe('Store', () => {
     })
   })
 
+  describe('endSession (pruning Pending Sets)', () => {
+    it('drops Sets that were never touched', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, bench.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 135, reps: 8 })
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.exercises[0].sets).toEqual([{ weight: 135, reps: 8 }])
+    })
+
+    it('leaves Logged Sets completely untouched, including a genuine weight of 0', async () => {
+      const pullup = await createExercise('Pull Up')
+      const workout = await store.createWorkout('Pull Day', [pullup.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, pullup.id, 0, { weight: 0, reps: 12 })
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.exercises[0].sets).toEqual([{ weight: 0, reps: 12 }])
+    })
+
+    it('keeps a partially-entered Set rather than discarding a number that was typed', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 135 })
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.exercises[0].sets).toEqual([{ weight: 135 }])
+    })
+
+    it('drops an untouched unilateral pair, side markers and all', async () => {
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+      await store.logSet(session.id, row.id)
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.exercises[0].sets).toEqual([])
+    })
+
+    it('keeps a fully-skipped Exercise listed with no Sets, recording that it was part of that day’s Workout', async () => {
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
+      const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 135, reps: 8 })
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.exercises).toHaveLength(2)
+      expect(ended.exercises[1].exerciseId).toBe(ohp.id)
+      expect(ended.exercises[1].sets).toEqual([])
+    })
+
+    it('persists the pruned Session rather than only returning it', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await store.endSession(session.id)
+
+      const reloaded = await sessions.get(session.id)
+      expect(reloaded?.exercises[0].sets).toEqual([])
+    })
+
+    it('leaves notes and times alone while pruning', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSessionNotes(session.id, 'felt strong')
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.notes).toBe('felt strong')
+      expect(ended.startTime).toBe(session.startTime)
+      expect(ended.endTime).toBeTruthy()
+    })
+  })
+
   describe('endSession', () => {
     it('records an end time', async () => {
       const workout = await store.createWorkout('Push Day', [])

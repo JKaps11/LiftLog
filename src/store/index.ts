@@ -381,9 +381,30 @@ export class Store {
     return updated
   }
 
+  /**
+   * Prunes Sets that were never touched, so a finished Session stores only work
+   * actually performed (ADR-0004) — otherwise a skipped Exercise's untouched Sets
+   * would be recorded as lifts and go on to seed the next Session's Ghost Values.
+   *
+   * The rule here is deliberately looser than isSetLogged: only a Set carrying no
+   * measurement at all is dropped. A half-entered Set survives, because silently
+   * discarding a number the lifter typed is worse than keeping one odd row, even
+   * though that row still reads as not-done in the UI.
+   *
+   * An Exercise left with nothing keeps its entry with an empty Set list. The
+   * entry is the ADR-0001 snapshot of what the Workout contained that day, so
+   * dropping it would erase the fact that the Exercise was skipped.
+   */
   async endSession(sessionId: string, endTime: string = new Date().toISOString()): Promise<Session> {
     const session = await this.requireSession(sessionId)
-    const updated: Session = { ...session, endTime }
+    const exercises = session.exercises.map((entry) => ({
+      ...entry,
+      sets: entry.sets.filter(
+        (set) =>
+          set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
+      ),
+    }))
+    const updated: Session = { ...session, exercises, endTime }
     await this.sessions.put(updated)
     return updated
   }
