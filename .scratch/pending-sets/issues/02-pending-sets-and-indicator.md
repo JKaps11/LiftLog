@@ -6,7 +6,7 @@ A weight of `0` is a real logged weight for bodyweight work and must read as don
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A pending-Set constructor replaces the current empty-Set constructor, producing a Set with no measurement fields
 - [ ] Logging a new Set appends a Pending Set, and a left/right Pending pair for a unilateral Exercise, still deciding pairing from the Exercise's live flag

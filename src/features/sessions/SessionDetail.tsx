@@ -20,6 +20,7 @@ export function SessionDetail({ session, exercises, onChange, onDelete, onBack }
   const {
     notes,
     setNotes,
+    carriedSets,
     handleAddSet,
     handleSetChange,
     handleSetReplace,
@@ -102,6 +103,7 @@ export function SessionDetail({ session, exercises, onChange, onDelete, onBack }
               key={entry.exerciseId}
               entry={entry}
               exercises={exercises}
+              carriedSets={carriedSets[entry.exerciseId]}
               onAddSet={handleAddSet}
               onSetChange={handleSetChange}
               onSetReplace={handleSetReplace}

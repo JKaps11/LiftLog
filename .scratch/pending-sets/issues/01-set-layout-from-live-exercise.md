@@ -6,7 +6,7 @@ This is the prefactor that makes the rest of the feature possible: once a Pendin
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A new pure module beside the existing Set-grouping helper resolves a Set row's layout from the live Exercise, with its own unit test file in the same style
 - [ ] The Session Exercise card renders through that module and no longer branches on whether the Set carries a duration

@@ -2,7 +2,7 @@ Status: ready-for-agent
 
 # Timed Exercises — Spec
 
-> **Partly superseded by ADR-0005 and `.scratch/pending-sets/spec.md`.** This spec's decision that a Set's rendering is driven by the presence of `durationSeconds` on the Set rather than by the Exercise's current `isTimed` value — and user story 7, which depends on it — has been reversed. Rendering now derives from the live Exercise. Everything else here still stands.
+> **Partly superseded by ADR-0005, ADR-0004 and `.scratch/pending-sets/spec.md`.** Reversed here: (a) the decision that a Set's rendering is driven by the presence of `durationSeconds` on the Set rather than by the Exercise's current `isTimed` value, and user story 7, which depends on it — rendering now derives from the live Exercise; (b) `logSet` branching on `isTimed` to build `{ durationSeconds: 0 }` or `{ weight: 0, reps: 0 }` — it now appends a Pending Set carrying no measurements, and `emptySet()` is replaced by `pendingSet()`. The `isTimed` Exercise flag, the duration-only Set shape, the seed tagging and the isTimed x isUnilateral combination all still stand.
 
 ## Problem Statement
 

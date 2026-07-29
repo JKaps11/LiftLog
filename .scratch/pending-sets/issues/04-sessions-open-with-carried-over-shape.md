@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Starting a Session creates Pending Sets with no measurement fields, never copying weights, reps or durations from history
 - [ ] The number of Set groups for each Exercise comes from the most recent Session that Logged that Exercise; whether each group is a solo Set or a left/right pair comes from the Exercise's current unilateral flag

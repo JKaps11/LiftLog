@@ -543,7 +543,7 @@ describe('Store', () => {
       expect(session.exercises[0].exerciseNameAtLogTime).toBe('Bench Press')
     })
 
-    it('snapshots the Workout name and Exercise list, denormalizing each Exercise name, with one empty set when there is no prior Session', async () => {
+    it('snapshots the Workout name and Exercise list, denormalizing each Exercise name, with one Pending Set when there is no prior Session', async () => {
       const bench = await createExercise('Bench Press')
       const ohp = await createExercise('Overhead Press')
       const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
@@ -1534,18 +1534,52 @@ describe('Store', () => {
     })
 
     it('reaches past a Session where the Exercise was skipped', async () => {
-      const bench = await createExercise('Bench Press')
-      const workout = await store.createWorkout('Push Day', [bench.id])
-      const older = await store.startSession(workout.id)
-      await store.updateSet(older.id, bench.id, 0, { weight: 135, reps: 8 })
-      await store.endSession(older.id)
-      const skipped = await store.startSession(workout.id)
-      await store.endSession(skipped.id)
-      const session = await store.startSession(workout.id)
+      vi.useFakeTimers()
+      try {
+        const bench = await createExercise('Bench Press')
+        const workout = await store.createWorkout('Push Day', [bench.id])
+        const older = await store.startSession(workout.id)
+        await store.updateSet(older.id, bench.id, 0, { weight: 135, reps: 8 })
+        await store.endSession(older.id)
 
-      const carried = await store.getCarriedOverSets(session.id)
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const skipped = await store.startSession(workout.id)
+        await store.endSession(skipped.id)
 
-      expect(carried[bench.id]).toEqual([{ weight: 135, reps: 8 }])
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const session = await store.startSession(workout.id)
+
+        const carried = await store.getCarriedOverSets(session.id)
+
+        expect(carried[bench.id]).toEqual([{ weight: 135, reps: 8 }])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('reaches past a Session whose only surviving Set was half-entered, which is not performance to aim at', async () => {
+      vi.useFakeTimers()
+      try {
+        const bench = await createExercise('Bench Press')
+        const workout = await store.createWorkout('Push Day', [bench.id])
+        const older = await store.startSession(workout.id)
+        await store.updateSet(older.id, bench.id, 0, { weight: 135, reps: 8 })
+        await store.endSession(older.id)
+
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const halfEntered = await store.startSession(workout.id)
+        await store.updateSet(halfEntered.id, bench.id, 0, { weight: 100 })
+        await store.endSession(halfEntered.id)
+
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const session = await store.startSession(workout.id)
+
+        const carried = await store.getCarriedOverSets(session.id)
+
+        expect(carried[bench.id]).toEqual([{ weight: 135, reps: 8 }])
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
     it('offers nothing for an Exercise with no history in this Workout', async () => {

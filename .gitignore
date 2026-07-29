@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Scratch prototypes are throwaway artefacts of a design question, not source
+.scratch/*/prototype/
+
+# Stray images dropped at the repo root are not source
+/*.jpg
+/*.jpeg
+/*.png

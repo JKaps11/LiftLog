@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Ending a Session removes Sets carrying no measurement fields at all
 - [ ] Logged Sets are left completely untouched

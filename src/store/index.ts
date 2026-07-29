@@ -70,6 +70,65 @@ export function resolveExerciseDisplayName(
   return live?.name ?? entry.exerciseNameAtLogTime
 }
 
+/** Whether a Set carries any measurement at all — the weakest sense of "was performed", used where the Exercise isn't at hand. */
+export function carriesMeasurement(set: SessionSet): boolean {
+  return set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
+}
+
+/**
+ * The Sets most recently performed for one Exercise, looked back through a
+ * Workout's Sessions newest-first. Per-Exercise rather than per-Session because
+ * untouched Sets are pruned at End Session: an Exercise skipped last week has no
+ * Sets there to take a shape from, and the week before is the honest answer.
+ *
+ * Only fully Logged Sets qualify. A half-entered Set survives End Session, but it
+ * is not performance to aim at: taking it as the source would shape today's
+ * Session from an abandoned row and hint one measurement while leaving the other
+ * blank, so a tap that reads as accepting would leave the Set Pending.
+ */
+function lastLoggedSetsForExercise(
+  newestFirst: Session[],
+  exerciseId: string,
+  exercise: Exercise | undefined
+): SessionSet[] | undefined {
+  for (const session of newestFirst) {
+    const sets = session.exercises
+      .find((entry) => entry.exerciseId === exerciseId)
+      ?.sets.filter((set) => isSetLogged(exercise, set))
+    if (sets?.length) return sets
+  }
+  return undefined
+}
+
+/** How many Logical Sets a list represents — a left+right pair counts once, as the lifter counts it. */
+function countLogicalSets(sets: SessionSet[] | undefined): number {
+  if (!sets?.length) return 1
+
+  let logicalSets = 0
+  for (let i = 0; i < sets.length; i++) {
+    if (sets[i].side === 'left' && sets[i + 1]?.side === 'right') i++
+    logicalSets++
+  }
+  return logicalSets
+}
+
+/**
+ * Builds `logicalSets` Logical Sets, all Pending. The count comes from history but
+ * solo-vs-pair comes from the Exercise as it is configured now, consistent with
+ * ADR-0005 — flipping an Exercise to unilateral should change how today's Sets
+ * materialize rather than carrying a stale pattern forward.
+ */
+function materializePendingSets(logicalSets: number, isUnilateral: boolean): SessionSet[] {
+  return Array.from({ length: logicalSets }, () =>
+    isUnilateral
+      ? [
+          { ...pendingSet(), side: 'left' as const },
+          { ...pendingSet(), side: 'right' as const },
+        ]
+      : [pendingSet()]
+  ).flat()
+}
+
 /**
  * Whether a Set records work actually performed, as opposed to a Pending Set
  * awaiting its numbers (ADR-0004). Which measurements are required follows from
@@ -81,63 +140,8 @@ export function resolveExerciseDisplayName(
  * Falls back to "carries any measurement" when the Exercise has been deleted,
  * mirroring resolveExerciseDisplayName.
  */
-/** Whether a Set carries any measurement at all — the weakest sense of "was performed", used where the Exercise isn't at hand. */
-function carriesMeasurement(set: SessionSet): boolean {
-  return set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
-}
-
-/**
- * The Sets most recently performed for one Exercise, looked back through a
- * Workout's Sessions newest-first. Per-Exercise rather than per-Session because
- * untouched Sets are pruned at End Session: an Exercise skipped last week has no
- * Sets there to take a shape from, and the week before is the honest answer.
- */
-function lastLoggedSetsForExercise(
-  newestFirst: Session[],
-  exerciseId: string
-): SessionSet[] | undefined {
-  for (const session of newestFirst) {
-    const sets = session.exercises
-      .find((entry) => entry.exerciseId === exerciseId)
-      ?.sets.filter(carriesMeasurement)
-    if (sets?.length) return sets
-  }
-  return undefined
-}
-
-/** How many logical Sets a list represents — a left+right pair counts once. */
-function countSetGroups(sets: SessionSet[] | undefined): number {
-  if (!sets?.length) return 1
-
-  let groups = 0
-  for (let i = 0; i < sets.length; i++) {
-    if (sets[i].side === 'left' && sets[i + 1]?.side === 'right') i++
-    groups++
-  }
-  return groups
-}
-
-/**
- * Builds `groups` logical Sets, all Pending. The count comes from history but
- * solo-vs-pair comes from the Exercise as it is configured now, consistent with
- * ADR-0005 — flipping an Exercise to unilateral should change how today's Sets
- * materialize rather than carrying a stale pattern forward.
- */
-function materializePendingSets(groups: number, isUnilateral: boolean): SessionSet[] {
-  return Array.from({ length: groups }, () =>
-    isUnilateral
-      ? [
-          { ...pendingSet(), side: 'left' as const },
-          { ...pendingSet(), side: 'right' as const },
-        ]
-      : [pendingSet()]
-  ).flat()
-}
-
 export function isSetLogged(exercise: Exercise | undefined, set: SessionSet): boolean {
-  if (!exercise) {
-    return set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
-  }
+  if (!exercise) return carriesMeasurement(set)
   return exercise.isTimed
     ? set.durationSeconds !== undefined
     : set.weight !== undefined && set.reps !== undefined
@@ -349,11 +353,11 @@ export class Store {
       workout.exerciseIds.map(async (exerciseId) => {
         const exercise = await this.exercises.get(exerciseId)
         if (!exercise) return null
-        const carried = lastLoggedSetsForExercise(history, exerciseId)
+        const carried = lastLoggedSetsForExercise(history, exerciseId, exercise)
         return {
           exerciseId,
           exerciseNameAtLogTime: exercise.name,
-          sets: materializePendingSets(countSetGroups(carried), exercise.isUnilateral),
+          sets: materializePendingSets(countLogicalSets(carried), exercise.isUnilateral),
         }
       })
     )
@@ -455,10 +459,7 @@ export class Store {
     const session = await this.requireSession(sessionId)
     const exercises = session.exercises.map((entry) => ({
       ...entry,
-      sets: entry.sets.filter(
-        (set) =>
-          set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
-      ),
+      sets: entry.sets.filter(carriesMeasurement),
     }))
     const updated: Session = { ...session, exercises, endTime }
     await this.sessions.put(updated)
@@ -501,7 +502,8 @@ export class Store {
 
     const carried: Record<string, SessionSet[]> = {}
     for (const entry of session.exercises) {
-      const sets = lastLoggedSetsForExercise(history, entry.exerciseId)
+      const exercise = await this.exercises.get(entry.exerciseId)
+      const sets = lastLoggedSetsForExercise(history, entry.exerciseId, exercise)
       if (sets) carried[entry.exerciseId] = sets
     }
     return carried

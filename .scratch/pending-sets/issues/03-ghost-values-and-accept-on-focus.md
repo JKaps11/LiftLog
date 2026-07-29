@@ -6,7 +6,7 @@ At this point the only Pending Sets come from "Add set", so this delivers the wi
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The display module resolves Ghost Values per field alongside solid values, and its test covers pending, logged, and partially-entered rows
 - [ ] A Pending row shows its Ghost Values as muted placeholder text and no solid values
