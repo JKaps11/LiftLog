@@ -1,6 +1,6 @@
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
 import type { EntityTable } from './table'
-import { emptySet, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
+import { pendingSet, withoutAbsentMeasurements, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
 import type {
   Exercise,
   ExerciseType,
@@ -27,7 +27,7 @@ function parseExerciseType(value: string): ExerciseType {
   return value as ExerciseType
 }
 
-export { emptySet, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
+export { pendingSet, withoutAbsentMeasurements, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
 export type {
   Exercise,
   ExerciseType,
@@ -70,41 +70,81 @@ export function resolveExerciseDisplayName(
   return live?.name ?? entry.exerciseNameAtLogTime
 }
 
-/**
- * The Set a newly added Set carries its load from — the last logical Set,
- * meaning the matching half of the final left+right pair when adding to a
- * unilateral Exercise, or the final Set alone when adding a plain Set. The
- * look-back is deliberately exactly one logical Set, never a scan back through
- * the list: whatever is at the end is what the lifter just did.
- *
- * Requesting a side when the list doesn't end in a pair (e.g. plain Sets logged
- * before isUnilateral was turned on) yields nothing, so the new pair falls back
- * to zeroes rather than guessing a side. Pair adjacency is the same invariant
- * logSet/deleteSet rely on.
- */
-function lastLoggedSet(sets: SessionSet[], side?: 'left' | 'right'): SessionSet | undefined {
-  const last = sets.at(-1)
-  if (!side) return last
-
-  const beforeLast = sets.at(-2)
-  if (beforeLast?.side !== 'left' || last?.side !== 'right') return undefined
-  return side === 'left' ? beforeLast : last
+/** Whether a Set carries any measurement at all — the weakest sense of "was performed", used where the Exercise isn't at hand. */
+export function carriesMeasurement(set: SessionSet): boolean {
+  return set.weight !== undefined || set.reps !== undefined || set.durationSeconds !== undefined
 }
 
 /**
- * Builds the Set that "Add set" appends, carrying the *load* forward from the
- * preceding Set — weight for a weighted Exercise, duration for a timed one —
- * because the bar is already loaded and the hold time is a target you dial in.
- * Reps are deliberately NOT carried: the rep count is the outcome you're
- * pushing set to set, so it changes nearly every time, and a prefilled count
- * you forget to correct silently records a lift that never happened. Starting a
- * Session is different — see startSession, which clones the previous Session's
- * full grid, reps included, as the performance to beat.
+ * The Sets most recently performed for one Exercise, looked back through a
+ * Workout's Sessions newest-first. Per-Exercise rather than per-Session because
+ * untouched Sets are pruned at End Session: an Exercise skipped last week has no
+ * Sets there to take a shape from, and the week before is the honest answer.
+ *
+ * Only fully Logged Sets qualify. A half-entered Set survives End Session, but it
+ * is not performance to aim at: taking it as the source would shape today's
+ * Session from an abandoned row and hint one measurement while leaving the other
+ * blank, so a tap that reads as accepting would leave the Set Pending.
  */
-function carryLoadForward(previous: SessionSet | undefined, isTimed: boolean): SessionSet {
-  return isTimed
-    ? { durationSeconds: previous?.durationSeconds ?? 0 }
-    : { weight: previous?.weight ?? 0, reps: 0 }
+function lastLoggedSetsForExercise(
+  newestFirst: Session[],
+  exerciseId: string,
+  exercise: Exercise | undefined
+): SessionSet[] | undefined {
+  for (const session of newestFirst) {
+    const sets = session.exercises
+      .find((entry) => entry.exerciseId === exerciseId)
+      ?.sets.filter((set) => isSetLogged(exercise, set))
+    if (sets?.length) return sets
+  }
+  return undefined
+}
+
+/** How many Logical Sets a list represents — a left+right pair counts once, as the lifter counts it. */
+function countLogicalSets(sets: SessionSet[] | undefined): number {
+  if (!sets?.length) return 1
+
+  let logicalSets = 0
+  for (let i = 0; i < sets.length; i++) {
+    if (sets[i].side === 'left' && sets[i + 1]?.side === 'right') i++
+    logicalSets++
+  }
+  return logicalSets
+}
+
+/**
+ * Builds `logicalSets` Logical Sets, all Pending. The count comes from history but
+ * solo-vs-pair comes from the Exercise as it is configured now, consistent with
+ * ADR-0005 — flipping an Exercise to unilateral should change how today's Sets
+ * materialize rather than carrying a stale pattern forward.
+ */
+function materializePendingSets(logicalSets: number, isUnilateral: boolean): SessionSet[] {
+  return Array.from({ length: logicalSets }, () =>
+    isUnilateral
+      ? [
+          { ...pendingSet(), side: 'left' as const },
+          { ...pendingSet(), side: 'right' as const },
+        ]
+      : [pendingSet()]
+  ).flat()
+}
+
+/**
+ * Whether a Set records work actually performed, as opposed to a Pending Set
+ * awaiting its numbers (ADR-0004). Which measurements are required follows from
+ * the Exercise, never from which fields happen to be present (ADR-0005): a timed
+ * Exercise needs a duration, anything else needs both weight and reps. Zero is a
+ * real measurement — bodyweight work is `weight: 0`, and a failed Set is
+ * `reps: 0` — so absence, not falsiness, is the test.
+ *
+ * Falls back to "carries any measurement" when the Exercise has been deleted,
+ * mirroring resolveExerciseDisplayName.
+ */
+export function isSetLogged(exercise: Exercise | undefined, set: SessionSet): boolean {
+  if (!exercise) return carriesMeasurement(set)
+  return exercise.isTimed
+    ? set.durationSeconds !== undefined
+    : set.weight !== undefined && set.reps !== undefined
 }
 
 export class Store {
@@ -291,9 +331,13 @@ export class Store {
   /**
    * Snapshots the Workout's current name and Exercise list into the new
    * Session (ADR-0001) and denormalizes each Exercise's current name for
-   * defensive display in case the Exercise is later deleted. Each Exercise's
-   * Sets pre-fill from the most recent prior Session for this Workout, or
-   * start with a single empty set if there is none.
+   * defensive display in case the Exercise is later deleted.
+   *
+   * Each Exercise opens as Pending Sets carrying no measurements (ADR-0004): the
+   * *shape* of last time's work is carried over — how many Sets, and solo or
+   * left/right pair — while the numbers are not, so nothing on screen claims to
+   * have been performed. Last time's numbers surface separately as Ghost Values,
+   * see getCarriedOverSets.
    *
    * An exerciseId with no Exercise behind it is skipped rather than snapshotted
    * — the denormalized name would be the raw uuid, and a Session is permanent,
@@ -303,18 +347,17 @@ export class Store {
     const workout = await this.workouts.get(workoutId)
     if (!workout) throw new Error(`Workout not found: ${workoutId}`)
 
-    const lastSession = await this.getLastSessionForWorkout(workoutId)
+    const history = await this.sessionsForWorkout(workoutId)
 
     const resolved = await Promise.all(
       workout.exerciseIds.map(async (exerciseId) => {
         const exercise = await this.exercises.get(exerciseId)
         if (!exercise) return null
-        const priorSets = lastSession?.exercises.find((entry) => entry.exerciseId === exerciseId)
-          ?.sets ?? [emptySet()]
+        const carried = lastLoggedSetsForExercise(history, exerciseId, exercise)
         return {
           exerciseId,
           exerciseNameAtLogTime: exercise.name,
-          sets: priorSets.map((set) => ({ ...set })),
+          sets: materializePendingSets(countLogicalSets(carried), exercise.isUnilateral),
         }
       })
     )
@@ -338,10 +381,15 @@ export class Store {
   /**
    * Against a unilateral Exercise (checked live by exerciseId), appends a
    * left+right pair of Sets in one call instead of a single Set. When `set` is
-   * omitted (the "Add set" path), the new Set is constructed live from the
-   * Exercise's current isTimed flag and carries the load forward from the
-   * Session's last logical Set (see carryLoadForward), rather than the caller
-   * needing to know which shape to build or what to prefill.
+   * omitted (the "Add set" path) the new Set is Pending — no measurements at all
+   * — so an added Set never reads as already performed.
+   *
+   * Nothing is carried forward into it. This supersedes the previous
+   * carry-the-weight-forward behavior, which existed to avoid retyping the load
+   * but deliberately withheld reps because "a prefilled count you forget to
+   * correct silently records a lift that never happened". Ghost Values solve that
+   * properly: last Session's numbers are shown as placeholders and can be
+   * accepted in one tap, without any of them being stored until they are.
    */
   async logSet(sessionId: string, exerciseId: string, set?: SessionSet): Promise<Session> {
     const session = await this.requireSession(sessionId)
@@ -351,13 +399,11 @@ export class Store {
     }
 
     const exercise = await this.exercises.get(exerciseId)
-    const isTimed = exercise?.isTimed ?? false
     const isUnilateral = exercise?.isUnilateral ?? false
 
-    const logged = entry.sets
     function build(side?: 'left' | 'right'): SessionSet {
-      const base = set ?? carryLoadForward(lastLoggedSet(logged, side), isTimed)
-      return side ? { ...base, side } : { ...base }
+      const base = set ?? pendingSet()
+      return withoutAbsentMeasurements(side ? { ...base, side } : { ...base })
     }
     const newSets: SessionSet[] = isUnilateral ? [build('left'), build('right')] : [build()]
 
@@ -384,7 +430,10 @@ export class Store {
 
     const exercises = session.exercises.map((e) =>
       e.exerciseId === exerciseId
-        ? { ...e, sets: e.sets.map((s, i) => (i === setIndex ? { ...set } : s)) }
+        ? {
+            ...e,
+            sets: e.sets.map((s, i) => (i === setIndex ? withoutAbsentMeasurements(set) : s)),
+          }
         : e
     )
     const updated: Session = { ...session, exercises }
@@ -392,9 +441,27 @@ export class Store {
     return updated
   }
 
+  /**
+   * Prunes Sets that were never touched, so a finished Session stores only work
+   * actually performed (ADR-0004) — otherwise a skipped Exercise's untouched Sets
+   * would be recorded as lifts and go on to seed the next Session's Ghost Values.
+   *
+   * The rule here is deliberately looser than isSetLogged: only a Set carrying no
+   * measurement at all is dropped. A half-entered Set survives, because silently
+   * discarding a number the lifter typed is worse than keeping one odd row, even
+   * though that row still reads as not-done in the UI.
+   *
+   * An Exercise left with nothing keeps its entry with an empty Set list. The
+   * entry is the ADR-0001 snapshot of what the Workout contained that day, so
+   * dropping it would erase the fact that the Exercise was skipped.
+   */
   async endSession(sessionId: string, endTime: string = new Date().toISOString()): Promise<Session> {
     const session = await this.requireSession(sessionId)
-    const updated: Session = { ...session, endTime }
+    const exercises = session.exercises.map((entry) => ({
+      ...entry,
+      sets: entry.sets.filter(carriesMeasurement),
+    }))
+    const updated: Session = { ...session, exercises, endTime }
     await this.sessions.put(updated)
     return updated
   }
@@ -406,10 +473,40 @@ export class Store {
     return updated
   }
 
-  async getLastSessionForWorkout(workoutId: string): Promise<Session | undefined> {
+  /** This Workout's Sessions, newest first, optionally excluding one — used to look back for Carried-Over Shape and Ghost Values. */
+  private async sessionsForWorkout(workoutId: string, excludeId?: string): Promise<Session[]> {
     const all = await this.sessions.toArray()
-    const forWorkout = all.filter((session) => session.workoutId === workoutId)
-    return sortByStartTimeDescending(forWorkout)[0]
+    const forWorkout = all.filter(
+      (session) => session.workoutId === workoutId && session.id !== excludeId
+    )
+    return sortByStartTimeDescending(forWorkout)
+  }
+
+  /**
+   * The Ghost Value source for each Exercise in a Session, keyed by exerciseId:
+   * the Sets most recently performed for that Exercise in this Workout, looked
+   * back per-Exercise so one skipped week doesn't erase the reference numbers.
+   *
+   * Excludes the given Session so an in-progress Session never ghosts from
+   * itself. Scoped to the same Workout deliberately — Exercise history spans
+   * every Workout for progress-tracking, but a hint must be contextual, and a
+   * heavy Bench Press on Push Day shouldn't suggest itself during Full Body.
+   *
+   * Read live while the Session is open rather than snapshotted, which does not
+   * conflict with ADR-0001: a Ghost Value is a transient hint and is never
+   * persisted. Editing an old Session mid-workout does shift today's hints.
+   */
+  async getCarriedOverSets(sessionId: string): Promise<Record<string, SessionSet[]>> {
+    const session = await this.requireSession(sessionId)
+    const history = await this.sessionsForWorkout(session.workoutId, sessionId)
+
+    const carried: Record<string, SessionSet[]> = {}
+    for (const entry of session.exercises) {
+      const exercise = await this.exercises.get(entry.exerciseId)
+      const sets = lastLoggedSetsForExercise(history, entry.exerciseId, exercise)
+      if (sets) carried[entry.exerciseId] = sets
+    }
+    return carried
   }
 
   /**

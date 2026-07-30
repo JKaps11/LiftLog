@@ -17,8 +17,24 @@ A single reusable movement (e.g., "Bench Press", "Squat"), shared across all Wor
 _Avoid_: Movement, lift
 
 **Set**:
-One completed unit of an Exercise within a Session, recording the weight and reps performed. A Session logs one or more Sets per Exercise.
+One unit of an Exercise within a Session, recording the weight and reps performed. A Session holds one or more Sets per Exercise. Every Set is either Logged or Pending.
 _Avoid_: Rep (a Rep is a single repetition within a Set, not the Set itself)
+
+**Logged Set**:
+A Set the user actually performed, carrying every measurement its Exercise implies — weight and reps, or a duration for a timed Exercise. A Set is Logged if and only if those measurements are present, so a weight of zero is Logged while an absent weight is not.
+_Avoid_: Completed Set, done Set
+
+**Pending Set**:
+A Set that exists in a Session but has not been performed, carrying no measurements. Entering a measurement is what turns a Pending Set into a Logged Set — there is no separate act of completing one.
+_Avoid_: Incomplete Set, empty Set, unlogged Set, prefilled Set
+
+**Carried-Over Shape**:
+The structure of the work a Session opens with, taken from the last Session that Logged the Exercise: how many Sets, and whether each is a solo Set or a left/right pair. Only the shape is carried over — never the measurements, which is what distinguishes a fresh Session from a completed one.
+_Avoid_: Prefill, template (a Workout is the template; the Carried-Over Shape comes from history)
+
+**Ghost Value**:
+A measurement from the last Session that Logged an Exercise, shown as a hint inside a Pending Set's empty field. A Ghost Value is display-only and never stored; accepting one writes it as a real measurement.
+_Avoid_: Placeholder, prefilled value, previous value
 
 **Logical Set**:
 One Set as the lifter counts it: a single Set for an ordinary Exercise, or the left+right pair for a unilateral one. A unilateral Logical Set is numbered as one Set even though it records two performances.

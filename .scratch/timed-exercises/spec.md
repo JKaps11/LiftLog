@@ -2,6 +2,8 @@ Status: ready-for-agent
 
 # Timed Exercises — Spec
 
+> **Partly superseded by ADR-0005, ADR-0004 and `.scratch/pending-sets/spec.md`.** Reversed here: (a) the decision that a Set's rendering is driven by the presence of `durationSeconds` on the Set rather than by the Exercise's current `isTimed` value, and user story 7, which depends on it — rendering now derives from the live Exercise; (b) `logSet` branching on `isTimed` to build `{ durationSeconds: 0 }` or `{ weight: 0, reps: 0 }` — it now appends a Pending Set carrying no measurements, and `emptySet()` is replaced by `pendingSet()`. The `isTimed` Exercise flag, the duration-only Set shape, the seed tagging and the isTimed x isUnilateral combination all still stand.
+
 ## Problem Statement
 
 Some Exercises aren't measured by weight/reps at all — mobility work, stretches, and static holds (Plank, Wall Sit, a hamstring stretch) are measured by how long they're held. Today the app has no way to mark an Exercise as timed, and every Set requires a weight and rep count, which is meaningless for this kind of work. Logging a stretch currently means either faking a weight/rep pair or not tracking it in the app at all.
