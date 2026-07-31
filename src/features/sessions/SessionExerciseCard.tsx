@@ -1,9 +1,15 @@
 import { X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { resolveExerciseDisplayName, type Exercise, type SessionExerciseEntry, type SessionSet } from '@/store'
+import {
+  resolveExerciseDisplayName,
+  type Exercise,
+  type SessionExerciseEntry,
+  type SessionSet,
+  type SetMeasurements,
+} from '@/store'
 import { groupSessionSets } from './sessionSetGrouping'
 import { acceptGhostValues, resolveGhostSets, resolveSetRow, type SetField } from './setDisplay'
 
@@ -13,13 +19,10 @@ interface SessionExerciseCardProps {
   /** The Sets performed the last time this Exercise was Logged in this Workout — the Ghost Value source. */
   carriedSets?: SessionSet[]
   onAddSet: (exerciseId: string) => void
-  onSetChange: (
-    exerciseId: string,
-    setIndex: number,
-    field: 'weight' | 'reps' | 'durationSeconds',
-    value: number | undefined
-  ) => void
-  onSetReplace: (exerciseId: string, setIndex: number, set: SessionSet) => void
+  /** Writes the named measurements onto one Set, leaving the ones it doesn't name as stored. */
+  onSetPatch: (exerciseId: string, setIndex: number, patch: SetMeasurements) => void
+  /** Offers Ghost Values to one Set; only the measurements it is still missing are taken. */
+  onAcceptGhostValues: (exerciseId: string, setIndex: number, values: SetMeasurements) => void
   onDeleteSet: (exerciseId: string, setIndex: number) => void
 }
 
@@ -43,6 +46,13 @@ interface SessionExerciseCardProps {
  * Ghost Value armed a wait nothing would ever satisfy, and the lifter's own first
  * digit tripped it — selecting what they had just typed so the second digit
  * replaced it instead of following it.
+ *
+ * While being typed into, the input shows what was typed rather than what has been
+ * persisted. Persisting is a round-trip, so a keystroke-driven `value` prop always
+ * lags the keys — and a lagging value landing back on a controlled input eats every
+ * digit typed since it was read. The draft holds the raw string rather than the
+ * parsed number, so what is displayed is never a round-trip behind the keyboard, and
+ * is dropped on blur to hand the field back to the stored value it now agrees with.
  */
 function SetValueField({
   inputMode,
@@ -62,6 +72,7 @@ function SetValueField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const awaitingAcceptedValue = useRef(false)
+  const [draft, setDraft] = useState<string | null>(null)
 
   useEffect(() => {
     if (!awaitingAcceptedValue.current) return
@@ -78,7 +89,7 @@ function SetValueField({
         ref={inputRef}
         type="number"
         inputMode={inputMode}
-        value={field.value ?? ''}
+        value={draft ?? (field.value === undefined ? '' : String(field.value))}
         placeholder={field.ghost === undefined ? undefined : String(field.ghost)}
         onFocus={() => {
           const accepting = onFocus()
@@ -86,9 +97,11 @@ function SetValueField({
         }}
         onBlur={() => {
           awaitingAcceptedValue.current = false
+          setDraft(null)
         }}
         onChange={(event) => {
           awaitingAcceptedValue.current = false
+          setDraft(event.target.value)
           onChange(event.target.value === '' ? undefined : Number(event.target.value))
         }}
         aria-label={ariaLabel}
@@ -107,8 +120,8 @@ export function SessionExerciseCard({
   exercises,
   carriedSets,
   onAddSet,
-  onSetChange,
-  onSetReplace,
+  onSetPatch,
+  onAcceptGhostValues,
   onDeleteSet,
 }: SessionExerciseCardProps) {
   const displayName = resolveExerciseDisplayName(exercises, entry)
@@ -126,9 +139,9 @@ export function SessionExerciseCard({
    * field only waits to select a value that is genuinely coming.
    */
   function acceptRow(setIndex: number, set: SessionSet): boolean {
-    const accepted = acceptGhostValues(liveExercise, set, ghosts[setIndex])
-    if (!accepted) return false
-    onSetReplace(entry.exerciseId, setIndex, accepted)
+    const offered = acceptGhostValues(liveExercise, set, ghosts[setIndex])
+    if (!offered) return false
+    onAcceptGhostValues(entry.exerciseId, setIndex, offered)
     return true
   }
 
@@ -168,7 +181,7 @@ export function SessionExerciseCard({
                     <SetValueField
                       inputMode="numeric"
                       field={row.duration}
-                      onChange={(value) => onSetChange(entry.exerciseId, index, 'durationSeconds', value)}
+                      onChange={(value) => onSetPatch(entry.exerciseId, index, { durationSeconds: value })}
                       onFocus={() => acceptRow(index, set)}
                       ariaLabel={`${label} duration (seconds) for ${displayName}`}
                       unit="sec"
@@ -178,7 +191,7 @@ export function SessionExerciseCard({
                       <SetValueField
                         inputMode="decimal"
                         field={row.weight ?? { value: undefined, ghost: undefined }}
-                        onChange={(value) => onSetChange(entry.exerciseId, index, 'weight', value)}
+                        onChange={(value) => onSetPatch(entry.exerciseId, index, { weight: value })}
                         onFocus={() => acceptRow(index, set)}
                         ariaLabel={`${label} weight (lbs) for ${displayName}`}
                         unit="lbs"
@@ -187,7 +200,7 @@ export function SessionExerciseCard({
                       <SetValueField
                         inputMode="numeric"
                         field={row.reps ?? { value: undefined, ghost: undefined }}
-                        onChange={(value) => onSetChange(entry.exerciseId, index, 'reps', value)}
+                        onChange={(value) => onSetPatch(entry.exerciseId, index, { reps: value })}
                         onFocus={() => acceptRow(index, set)}
                         ariaLabel={`${label} reps for ${displayName}`}
                         unit="reps"

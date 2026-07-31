@@ -61,6 +61,15 @@ export interface SessionSet {
 }
 
 /**
+ * Some subset of a Set's measurements — what a write claims, as opposed to a whole
+ * Set. Excludes `side`, which is per-Set data rather than something measured.
+ */
+export type SetMeasurements = Partial<Pick<SessionSet, 'weight' | 'reps' | 'durationSeconds'>>
+
+/** The measurement keys, so a write can walk them without restating them at each call site. */
+export const MEASUREMENT_FIELDS = ['weight', 'reps', 'durationSeconds'] as const
+
+/**
  * A Pending Set: present in a Session but not yet performed, so it carries no
  * measurements at all (ADR-0004). `side` is added separately by logSet where the
  * Exercise is unilateral — side is per-Set data, not a measurement.

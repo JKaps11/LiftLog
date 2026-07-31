@@ -18,8 +18,8 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
     setNotes,
     carriedSets,
     handleAddSet,
-    handleSetChange,
-    handleSetReplace,
+    handleSetPatch,
+    handleAcceptGhostValues,
     handleDeleteSet,
     handleNotesBlur,
   } =
@@ -40,8 +40,8 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
               exercises={exercises}
               carriedSets={carriedSets[entry.exerciseId]}
               onAddSet={handleAddSet}
-              onSetChange={handleSetChange}
-              onSetReplace={handleSetReplace}
+              onSetPatch={handleSetPatch}
+              onAcceptGhostValues={handleAcceptGhostValues}
               onDeleteSet={handleDeleteSet}
             />
           ))}

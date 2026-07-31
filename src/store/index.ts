@@ -1,6 +1,12 @@
 import EXERCISE_SEED from '@/data/exerciseSeed.json'
 import type { EntityTable } from './table'
-import { pendingSet, withoutAbsentMeasurements, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
+import {
+  pendingSet,
+  withoutAbsentMeasurements,
+  EXERCISE_TYPES,
+  MEASUREMENT_FIELDS,
+  MUSCLE_GROUPS,
+} from './types'
 import type {
   Exercise,
   ExerciseType,
@@ -9,6 +15,7 @@ import type {
   Session,
   SessionExerciseEntry,
   SessionSet,
+  SetMeasurements,
   Workout,
 } from './types'
 
@@ -27,7 +34,13 @@ function parseExerciseType(value: string): ExerciseType {
   return value as ExerciseType
 }
 
-export { pendingSet, withoutAbsentMeasurements, EXERCISE_TYPES, MUSCLE_GROUPS } from './types'
+export {
+  pendingSet,
+  withoutAbsentMeasurements,
+  EXERCISE_TYPES,
+  MEASUREMENT_FIELDS,
+  MUSCLE_GROUPS,
+} from './types'
 export type {
   Exercise,
   ExerciseType,
@@ -36,6 +49,7 @@ export type {
   Session,
   SessionExerciseEntry,
   SessionSet,
+  SetMeasurements,
   Workout,
 } from './types'
 export type { EntityTable } from './table'
@@ -153,10 +167,36 @@ export class Store {
   private readonly sessions: EntityTable<Session>
   private seedPromise: Promise<void> | null = null
 
+  private sessionWrites: Promise<unknown> = Promise.resolve()
+
   constructor(deps: StoreDeps) {
     this.exercises = deps.exercises
     this.workouts = deps.workouts
     this.sessions = deps.sessions
+  }
+
+  /**
+   * Runs Session read-modify-writes one at a time, so two mutations fired before
+   * either lands can't both build from the same pre-mutation snapshot and write
+   * each other's change away. Every Session mutator reads the whole Session and
+   * puts it back, which makes any overlap a lost update: a digit typed into a
+   * weight field at the same moment a Ghost Value is accepted used to keep
+   * whichever write happened to finish last.
+   *
+   * The ordering lives here rather than in a database transaction because the
+   * EntityTable port is deliberately storage-agnostic — Dexie in the app, a Map in
+   * tests — and has no transaction to borrow. Reads stay unqueued. A queued method
+   * must never call another queued method, which would wait on itself forever.
+   *
+   * A rejected write doesn't poison the queue: the next one runs either way.
+   */
+  private queueSessionWrite<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.sessionWrites.then(work, work)
+    this.sessionWrites = result.then(
+      () => undefined,
+      () => undefined
+    )
+    return result
   }
 
   /**
@@ -392,53 +432,119 @@ export class Store {
    * accepted in one tap, without any of them being stored until they are.
    */
   async logSet(sessionId: string, exerciseId: string, set?: SessionSet): Promise<Session> {
-    const session = await this.requireSession(sessionId)
-    const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
-    if (!entry) {
-      throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
-    }
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
+      if (!entry) {
+        throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
+      }
 
-    const exercise = await this.exercises.get(exerciseId)
-    const isUnilateral = exercise?.isUnilateral ?? false
+      const exercise = await this.exercises.get(exerciseId)
+      const isUnilateral = exercise?.isUnilateral ?? false
 
-    function build(side?: 'left' | 'right'): SessionSet {
-      const base = set ?? pendingSet()
-      return withoutAbsentMeasurements(side ? { ...base, side } : { ...base })
-    }
-    const newSets: SessionSet[] = isUnilateral ? [build('left'), build('right')] : [build()]
+      function build(side?: 'left' | 'right'): SessionSet {
+        const base = set ?? pendingSet()
+        return withoutAbsentMeasurements(side ? { ...base, side } : { ...base })
+      }
+      const newSets: SessionSet[] = isUnilateral ? [build('left'), build('right')] : [build()]
 
-    const exercises = session.exercises.map((e) =>
-      e.exerciseId === exerciseId ? { ...e, sets: [...e.sets, ...newSets] } : e
-    )
-    const updated: Session = { ...session, exercises }
-    await this.sessions.put(updated)
-    return updated
+      const exercises = session.exercises.map((e) =>
+        e.exerciseId === exerciseId ? { ...e, sets: [...e.sets, ...newSets] } : e
+      )
+      const updated: Session = { ...session, exercises }
+      await this.sessions.put(updated)
+      return updated
+    })
   }
 
+  /**
+   * Merges a patch of measurements into a stored Set rather than replacing the
+   * whole Set, so a write only claims the fields it actually names. Two writes
+   * aimed at the same Set — the digit being typed into weight, and the reps a
+   * Ghost Value accept is filling in — then compose instead of clobbering,
+   * whichever order they land in.
+   *
+   * A key present with the value `undefined` clears that measurement, which is how
+   * emptying a field returns a Logged Set to Pending; a key merely absent from the
+   * patch leaves the stored measurement alone. `side` is per-Set data rather than a
+   * measurement and is never patched in practice, but survives either way.
+   */
   async updateSet(
     sessionId: string,
     exerciseId: string,
     setIndex: number,
-    set: SessionSet
+    patch: Partial<SessionSet>
   ): Promise<Session> {
-    const session = await this.requireSession(sessionId)
-    const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
-    if (!entry) throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
-    if (setIndex < 0 || setIndex >= entry.sets.length) {
-      throw new Error(`Set index out of range: ${setIndex}`)
-    }
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
+      if (!entry) throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
+      if (setIndex < 0 || setIndex >= entry.sets.length) {
+        throw new Error(`Set index out of range: ${setIndex}`)
+      }
 
-    const exercises = session.exercises.map((e) =>
-      e.exerciseId === exerciseId
-        ? {
-            ...e,
-            sets: e.sets.map((s, i) => (i === setIndex ? withoutAbsentMeasurements(set) : s)),
-          }
-        : e
-    )
-    const updated: Session = { ...session, exercises }
-    await this.sessions.put(updated)
-    return updated
+      const exercises = session.exercises.map((e) =>
+        e.exerciseId === exerciseId
+          ? {
+              ...e,
+              sets: e.sets.map((s, i) =>
+                i === setIndex ? withoutAbsentMeasurements({ ...s, ...patch }) : s
+              ),
+            }
+          : e
+      )
+      const updated: Session = { ...session, exercises }
+      await this.sessions.put(updated)
+      return updated
+    })
+  }
+
+  /**
+   * Fills in measurements the stored Set is missing, and only those — the write
+   * behind accepting Ghost Values.
+   *
+   * What counts as missing is decided here, against the Set as stored, rather than
+   * taken from the caller's snapshot of it. That is what makes it safe to fire this
+   * while a keystroke is still in flight: a measurement the lifter typed a moment
+   * ago is already present by the time this runs, so it survives instead of being
+   * overwritten by the hint it was replacing. A caller can only ever add to a Set
+   * this way, never change it.
+   *
+   * Writes nothing when the Set already carries everything offered, so a redundant
+   * accept costs no round-trip.
+   */
+  async fillSetMeasurements(
+    sessionId: string,
+    exerciseId: string,
+    setIndex: number,
+    values: SetMeasurements
+  ): Promise<Session> {
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
+      if (!entry) throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
+      const stored = entry.sets[setIndex]
+      if (!stored) throw new Error(`Set index out of range: ${setIndex}`)
+
+      const filled: SessionSet = { ...stored }
+      let changed = false
+      for (const field of MEASUREMENT_FIELDS) {
+        if (stored[field] === undefined && values[field] !== undefined) {
+          filled[field] = values[field]
+          changed = true
+        }
+      }
+      if (!changed) return session
+
+      const exercises = session.exercises.map((e) =>
+        e.exerciseId === exerciseId
+          ? { ...e, sets: e.sets.map((s, i) => (i === setIndex ? filled : s)) }
+          : e
+      )
+      const updated: Session = { ...session, exercises }
+      await this.sessions.put(updated)
+      return updated
+    })
   }
 
   /**
@@ -456,21 +562,25 @@ export class Store {
    * dropping it would erase the fact that the Exercise was skipped.
    */
   async endSession(sessionId: string, endTime: string = new Date().toISOString()): Promise<Session> {
-    const session = await this.requireSession(sessionId)
-    const exercises = session.exercises.map((entry) => ({
-      ...entry,
-      sets: entry.sets.filter(carriesMeasurement),
-    }))
-    const updated: Session = { ...session, exercises, endTime }
-    await this.sessions.put(updated)
-    return updated
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const exercises = session.exercises.map((entry) => ({
+        ...entry,
+        sets: entry.sets.filter(carriesMeasurement),
+      }))
+      const updated: Session = { ...session, exercises, endTime }
+      await this.sessions.put(updated)
+      return updated
+    })
   }
 
   async updateSessionNotes(sessionId: string, notes: string): Promise<Session> {
-    const session = await this.requireSession(sessionId)
-    const updated: Session = { ...session, notes }
-    await this.sessions.put(updated)
-    return updated
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const updated: Session = { ...session, notes }
+      await this.sessions.put(updated)
+      return updated
+    })
   }
 
   /** This Workout's Sessions, newest first, optionally excluding one — used to look back for Carried-Over Shape and Ghost Values. */
@@ -515,46 +625,50 @@ export class Store {
    * both. A plain Set (no `side`) is removed alone, as today.
    */
   async deleteSet(sessionId: string, exerciseId: string, setIndex: number): Promise<Session> {
-    const session = await this.requireSession(sessionId)
-    const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
-    if (!entry) throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
-    if (setIndex < 0 || setIndex >= entry.sets.length) {
-      throw new Error(`Set index out of range: ${setIndex}`)
-    }
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
+      if (!entry) throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
+      if (setIndex < 0 || setIndex >= entry.sets.length) {
+        throw new Error(`Set index out of range: ${setIndex}`)
+      }
 
-    const target = entry.sets[setIndex]
-    const indicesToRemove =
-      target.side === 'left'
-        ? [setIndex, setIndex + 1]
-        : target.side === 'right'
-          ? [setIndex - 1, setIndex]
-          : [setIndex]
+      const target = entry.sets[setIndex]
+      const indicesToRemove =
+        target.side === 'left'
+          ? [setIndex, setIndex + 1]
+          : target.side === 'right'
+            ? [setIndex - 1, setIndex]
+            : [setIndex]
 
-    const exercises = session.exercises.map((e) =>
-      e.exerciseId === exerciseId
-        ? { ...e, sets: e.sets.filter((_, i) => !indicesToRemove.includes(i)) }
-        : e
-    )
-    const updated: Session = { ...session, exercises }
-    await this.sessions.put(updated)
-    return updated
+      const exercises = session.exercises.map((e) =>
+        e.exerciseId === exerciseId
+          ? { ...e, sets: e.sets.filter((_, i) => !indicesToRemove.includes(i)) }
+          : e
+      )
+      const updated: Session = { ...session, exercises }
+      await this.sessions.put(updated)
+      return updated
+    })
   }
 
   async updateSessionTimes(
     sessionId: string,
     updates: { startTime?: string; endTime?: string }
   ): Promise<Session> {
-    const session = await this.requireSession(sessionId)
-    const startTime = updates.startTime ?? session.startTime
-    const updated: Session = {
-      ...session,
-      startTime,
-      endTime: updates.endTime ?? session.endTime,
-      // date tracks startTime's day — keep them in sync when startTime moves.
-      date: startTime,
-    }
-    await this.sessions.put(updated)
-    return updated
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const startTime = updates.startTime ?? session.startTime
+      const updated: Session = {
+        ...session,
+        startTime,
+        endTime: updates.endTime ?? session.endTime,
+        // date tracks startTime's day — keep them in sync when startTime moves.
+        date: startTime,
+      }
+      await this.sessions.put(updated)
+      return updated
+    })
   }
 
   async listSessions(): Promise<Session[]> {
