@@ -36,6 +36,13 @@ interface SessionExerciseCardProps {
  * the value because accepting is a persisted round-trip: at focus time the input
  * is still empty, and selecting nothing would leave the caret appending to a
  * number the lifter meant to overwrite.
+ *
+ * Waiting on the value alone can't tell an accepted Ghost Value from a digit the
+ * lifter typed, so the wait is armed only when an accept was actually issued and
+ * is disarmed by the first keystroke or blur. Without that, a Pending Set with no
+ * Ghost Value armed a wait nothing would ever satisfy, and the lifter's own first
+ * digit tripped it — selecting what they had just typed so the second digit
+ * replaced it instead of following it.
  */
 function SetValueField({
   inputMode,
@@ -48,7 +55,8 @@ function SetValueField({
   inputMode: 'decimal' | 'numeric'
   field: SetField
   onChange: (value: number | undefined) => void
-  onFocus: () => void
+  /** Accepts the row's Ghost Values; returns whether an accepted value is on its way to this row. */
+  onFocus: () => boolean
   ariaLabel: string
   unit: string
 }) {
@@ -73,12 +81,16 @@ function SetValueField({
         value={field.value ?? ''}
         placeholder={field.ghost === undefined ? undefined : String(field.ghost)}
         onFocus={() => {
-          awaitingAcceptedValue.current = field.value === undefined
-          onFocus()
+          const accepting = onFocus()
+          awaitingAcceptedValue.current = accepting && field.value === undefined
         }}
-        onChange={(event) =>
+        onBlur={() => {
+          awaitingAcceptedValue.current = false
+        }}
+        onChange={(event) => {
+          awaitingAcceptedValue.current = false
           onChange(event.target.value === '' ? undefined : Number(event.target.value))
-        }
+        }}
         aria-label={ariaLabel}
         className="h-11 flex-1 text-center font-mono text-lg font-semibold tabular-nums"
       />
@@ -108,10 +120,16 @@ export function SessionExerciseCard({
     return side === 'left' ? 'L' : 'R'
   }
 
-  /** Touching any field of a Pending Set logs the whole row from its Ghost Values — one tap, not one per field. */
-  function acceptRow(setIndex: number, set: SessionSet) {
+  /**
+   * Touching any field of a Pending Set logs the whole row from its Ghost Values —
+   * one tap, not one per field. Returns whether anything was actually written, so a
+   * field only waits to select a value that is genuinely coming.
+   */
+  function acceptRow(setIndex: number, set: SessionSet): boolean {
     const accepted = acceptGhostValues(liveExercise, set, ghosts[setIndex])
-    if (accepted) onSetReplace(entry.exerciseId, setIndex, accepted)
+    if (!accepted) return false
+    onSetReplace(entry.exerciseId, setIndex, accepted)
+    return true
   }
 
   return (
@@ -135,7 +153,7 @@ export function SessionExerciseCard({
                 >
                   <span
                     className={cn(
-                      'flex size-8 shrink-0 flex-col items-center justify-center rounded-md border font-mono text-sm tabular-nums',
+                      'flex h-8 min-w-8 shrink-0 items-center justify-center gap-px rounded-md border px-1 font-mono text-sm tabular-nums',
                       row.isLogged
                         ? 'border-transparent bg-muted text-foreground'
                         : 'border-dashed border-muted-foreground/40 bg-transparent text-muted-foreground/70'
@@ -143,9 +161,7 @@ export function SessionExerciseCard({
                   >
                     {groupIndex + 1}
                     {set.side && (
-                      <span className="text-[9px] leading-none font-semibold tracking-widest uppercase">
-                        {sideLetter(set.side)}
-                      </span>
+                      <span className="text-xs font-semibold uppercase">{sideLetter(set.side)}</span>
                     )}
                   </span>
                   {row.duration ? (
