@@ -749,6 +749,45 @@ describe('Store', () => {
       ])
     })
 
+    it('leaves measurements the patch does not name as they were stored', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 135, reps: 8 })
+
+      const updated = await store.updateSet(session.id, bench.id, 0, { reps: 6 })
+
+      expect(updated.exercises[0].sets[0]).toEqual({ weight: 135, reps: 6 })
+    })
+
+    it('composes two writes to the same Set fired before either lands, rather than keeping only the last', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      // A typed weight and an accepted Ghost Value for reps, neither awaited before
+      // the other starts — the interleaving that used to lose one of them.
+      const [, second] = await Promise.all([
+        store.updateSet(session.id, bench.id, 0, { weight: 135 }),
+        store.updateSet(session.id, bench.id, 0, { reps: 8 }),
+      ])
+
+      expect(second.exercises[0].sets[0]).toEqual({ weight: 135, reps: 8 })
+      const reloaded = await sessions.get(session.id)
+      expect(reloaded?.exercises[0].sets[0]).toEqual({ weight: 135, reps: 8 })
+    })
+
+    it('keeps serving writes after one rejects', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await expect(store.updateSet(session.id, bench.id, 9, { weight: 1 })).rejects.toThrow()
+      const updated = await store.updateSet(session.id, bench.id, 0, { weight: 135, reps: 8 })
+
+      expect(updated.exercises[0].sets[0]).toEqual({ weight: 135, reps: 8 })
+    })
+
     it('rejects updating a Set at an out-of-range index', async () => {
       const bench = await createExercise('Bench Press')
       const workout = await store.createWorkout('Push Day', [bench.id])
@@ -762,6 +801,99 @@ describe('Store', () => {
     it('rejects updating a Set for a nonexistent Session', async () => {
       await expect(
         store.updateSet('missing-id', 'exercise-id', 0, { weight: 100, reps: 5 })
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('fillSetMeasurements (accepting Ghost Values)', () => {
+    it('fills every measurement a Pending Set is missing', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.fillSetMeasurements(session.id, bench.id, 0, {
+        weight: 135,
+        reps: 8,
+      })
+
+      expect(updated.exercises[0].sets[0]).toEqual({ weight: 135, reps: 8 })
+    })
+
+    it('refuses to overwrite a measurement the Set already carries', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 145 })
+
+      const updated = await store.fillSetMeasurements(session.id, bench.id, 0, {
+        weight: 135,
+        reps: 8,
+      })
+
+      expect(updated.exercises[0].sets[0]).toEqual({ weight: 145, reps: 8 })
+    })
+
+    it('leaves a typed measurement alone even when the accept was decided before it was typed', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      // The lifter types a weight and taps into reps before that write lands, so the
+      // accept still offers the weight it saw missing a moment ago.
+      const [, accepted] = await Promise.all([
+        store.updateSet(session.id, bench.id, 0, { weight: 145 }),
+        store.fillSetMeasurements(session.id, bench.id, 0, { weight: 135, reps: 8 }),
+      ])
+
+      expect(accepted.exercises[0].sets[0]).toEqual({ weight: 145, reps: 8 })
+    })
+
+    it('treats a stored 0 as carried, not as missing', async () => {
+      const pullup = await createExercise('Pull Up')
+      const workout = await store.createWorkout('Pull Day', [pullup.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, pullup.id, 0, { weight: 0 })
+
+      const updated = await store.fillSetMeasurements(session.id, pullup.id, 0, {
+        weight: 135,
+        reps: 12,
+      })
+
+      expect(updated.exercises[0].sets[0]).toEqual({ weight: 0, reps: 12 })
+    })
+
+    it('writes nothing when the Set already carries everything offered', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 145, reps: 6 })
+      const put = vi.spyOn(sessions, 'put')
+
+      await store.fillSetMeasurements(session.id, bench.id, 0, { weight: 135, reps: 8 })
+
+      expect(put).not.toHaveBeenCalled()
+    })
+
+    it('preserves a Set’s side', async () => {
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
+      const workout = await store.createWorkout('Pull Day', [row.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.fillSetMeasurements(session.id, row.id, 1, {
+        weight: 40,
+        reps: 10,
+      })
+
+      expect(updated.exercises[0].sets[1]).toEqual({ side: 'right', weight: 40, reps: 10 })
+    })
+
+    it('rejects filling a Set at an out-of-range index', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await expect(
+        store.fillSetMeasurements(session.id, bench.id, 9, { weight: 135, reps: 8 })
       ).rejects.toThrow()
     })
   })

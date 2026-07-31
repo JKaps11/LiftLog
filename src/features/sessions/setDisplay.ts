@@ -1,4 +1,4 @@
-import { isSetLogged, withoutAbsentMeasurements, type Exercise, type SessionSet } from '@/store'
+import { isSetLogged, type Exercise, type SessionSet, type SetMeasurements } from '@/store'
 import { groupSessionSets, type SessionSetGroup } from './sessionSetGrouping'
 
 /** Which measurement fields a Set row shows: a single duration, or weight x reps. */
@@ -107,30 +107,37 @@ export function resolveSetRow(
 }
 
 /**
- * Accepting a Pending Set's Ghost Values: fills every measurement the row is
- * still missing, in one act, so touching the weight field logs the whole Set
- * rather than leaving the reps behind for a second tap.
+ * The Ghost Values on offer when a Pending Set is touched: every measurement the
+ * row's layout calls for that the hint can supply, so touching the weight field
+ * logs the whole Set rather than leaving the reps behind for a second tap.
  *
- * Returns `undefined` when there is nothing to write — no Ghost Values, or the
- * Set is already Logged — so the caller can skip the round-trip entirely rather
- * than persisting a no-op and re-rendering.
+ * These are *offered*, not imposed — Store.fillSetMeasurements writes only the ones
+ * the Set is still missing when the write actually runs. Which measurements are
+ * missing is deliberately not decided here: `set` is a render old, so a weight the
+ * lifter typed a moment ago can still look absent, and a value chosen on that basis
+ * would overwrite the digit that replaced it.
+ *
+ * Returns `undefined` when the row plainly has nothing to gain — already Logged, or
+ * no Ghost Value it is missing — so the caller can skip the round-trip rather than
+ * persisting a no-op and re-rendering. That check reads the same stale snapshot, but
+ * being wrong now costs a write the Store will decline, not a lost measurement.
  */
 export function acceptGhostValues(
   exercise: Exercise | undefined,
   set: SessionSet,
   ghost: SessionSet | undefined
-): SessionSet | undefined {
+): SetMeasurements | undefined {
   if (!ghost || isSetLogged(exercise, set)) return undefined
 
-  const accepted: SessionSet = { ...set }
-  if (resolveSetLayout(exercise, set) === 'timed') {
-    accepted.durationSeconds = set.durationSeconds ?? ghost.durationSeconds
-  } else {
-    accepted.weight = set.weight ?? ghost.weight
-    accepted.reps = set.reps ?? ghost.reps
+  const fields =
+    resolveSetLayout(exercise, set) === 'timed' ? (['durationSeconds'] as const) : (['weight', 'reps'] as const)
+  const offered: SetMeasurements = {}
+  for (const field of fields) {
+    if (ghost[field] !== undefined) offered[field] = ghost[field]
   }
 
-  const cleaned = withoutAbsentMeasurements(accepted)
-  const unchanged = JSON.stringify(cleaned) === JSON.stringify(withoutAbsentMeasurements(set))
-  return unchanged ? undefined : cleaned
+  const fillsSomething = fields.some(
+    (field) => offered[field] !== undefined && set[field] === undefined
+  )
+  return fillsSomething ? offered : undefined
 }

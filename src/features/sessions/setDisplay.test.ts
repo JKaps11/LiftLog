@@ -152,24 +152,26 @@ describe('resolveSetRow', () => {
 })
 
 describe('acceptGhostValues', () => {
-  it('fills every measurement of a Pending Set from its Ghost Values in one go', () => {
+  it('offers every measurement of a Pending Set from its Ghost Values in one go', () => {
     expect(acceptGhostValues(exercise(), {}, { weight: 135, reps: 8 })).toEqual({
       weight: 135,
       reps: 8,
     })
   })
 
-  it('fills only the still-absent measurement of a partially-entered Set', () => {
+  it('still offers a measurement the Set appears to carry, leaving it to the Store to decline', () => {
+    // Which measurements are missing is decided at write time, not from this
+    // one-render-old Set — see Store.fillSetMeasurements.
     expect(acceptGhostValues(exercise(), { weight: 145 }, { weight: 135, reps: 8 })).toEqual({
-      weight: 145,
+      weight: 135,
       reps: 8,
     })
   })
 
-  it('preserves the Set’s side', () => {
+  it('leaves side alone — Ghost Values are measurements only', () => {
     expect(
       acceptGhostValues(exercise({ isUnilateral: true }), { side: 'left' }, { weight: 40, reps: 10 })
-    ).toEqual({ weight: 40, reps: 10, side: 'left' })
+    ).toEqual({ weight: 40, reps: 10 })
   })
 
   it('fills only a duration for a timed Exercise, ignoring stray weight/reps in the Ghost', () => {
