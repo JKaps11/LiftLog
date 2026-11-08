@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { StrictMode } from 'react'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Exercise } from '@/store'
@@ -67,14 +68,23 @@ describe('AddExercisePicker', () => {
     expect(onCancel).toHaveBeenCalledOnce()
   })
 
-  it('closes when Android’s back button pops the history entry it pushed', async () => {
+  it('is not dismissed by merely opening, even under StrictMode’s double-run of effects', async () => {
     const onCancel = vi.fn()
-    renderPicker({ onCancel })
+    render(
+      <StrictMode>
+        <AddExercisePicker
+          exercises={[BENCH, FACE_PULL]}
+          inSessionIds={new Set()}
+          onPick={() => {}}
+          onCancel={onCancel}
+        />
+      </StrictMode>
+    )
 
     await act(async () => {
-      window.dispatchEvent(new PopStateEvent('popstate'))
+      await new Promise((resolve) => setTimeout(resolve, 50))
     })
 
-    expect(onCancel).toHaveBeenCalledOnce()
+    expect(onCancel).not.toHaveBeenCalled()
   })
 })

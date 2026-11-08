@@ -50,7 +50,12 @@ export function SessionsPage() {
   async function handleEnd(session: Session) {
     const ended = await store.endSession(session.id)
     void vegaSync.sync('session-ended')
-    const offered = await store.getAddedExercisesToKeep(ended.id)
+    // The offer is optional and the Session is already saved, so failing to work one
+    // out must not leave this screen showing an ended Session as if it were running.
+    const offered = await store.getAddedExercisesToKeep(ended.id).catch((error: unknown) => {
+      console.error('Could not work out which Added Exercises to offer', error)
+      return []
+    })
     setView(offered.length > 0 ? { mode: 'wrap-up', session: ended, offered } : { mode: 'pick' })
   }
 

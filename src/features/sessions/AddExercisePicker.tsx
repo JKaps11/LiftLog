@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { SectionLabel } from '@/components/ui/section-label'
 import { ExerciseBadges, ExerciseBrowser } from '@/features/exercises/ExerciseBrowser'
-import { useDismissOnBack } from '@/lib/useDismissOnBack'
 import type { Exercise } from '@/store'
 
 interface AddExercisePickerProps {
@@ -22,10 +21,12 @@ interface AddExercisePickerProps {
  * reason it can't be added is visible before the lifter goes looking for it. Every
  * Session operation identifies an entry by its Exercise, so a second one could
  * never be logged against.
+ *
+ * Android's back button is handled by whoever swaps this in, not here: the history
+ * entry has to be pushed when the step opens rather than when this mounts open,
+ * which StrictMode's double-run of effects would otherwise dismiss at once.
  */
 export function AddExercisePicker({ exercises, inSessionIds, onPick, onCancel }: AddExercisePickerProps) {
-  useDismissOnBack(true, onCancel)
-
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
       <ExerciseBrowser

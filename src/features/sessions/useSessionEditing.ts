@@ -8,14 +8,20 @@ export function useSessionEditing(session: Session, onChange: (session: Session)
 
   /**
    * Ghost Value sources for the whole Workout, keyed by exerciseId, fetched once
-   * per Session rather than per Set. Keyed on the Session's identity alone — not
-   * on the Sets being logged into it, which would refetch on every keystroke.
+   * per Session rather than per Set. Keyed on the Session's identity and its
+   * Exercises — not on the Sets being logged into it, which would refetch on every
+   * keystroke.
    *
    * Editing a past Session needs these too: an Exercise pruned to no Sets at End
    * Session has nothing within the Session to hint from, so a Set added while
    * correcting history would otherwise get no Ghost Values at all.
    */
   const [carriedSets, setCarriedSets] = useState<Record<string, SessionSet[]>>({})
+
+  // Keyed on which Exercises the Session holds as well as which Session it is, so an
+  // Exercise added mid-Session gets its hints. Still not on the Sets, which change
+  // with every keystroke.
+  const exerciseIdsKey = session.exercises.map((entry) => entry.exerciseId).join(',')
 
   useEffect(() => {
     let stale = false
@@ -25,7 +31,7 @@ export function useSessionEditing(session: Session, onChange: (session: Session)
     return () => {
       stale = true
     }
-  }, [session.id])
+  }, [session.id, exerciseIdsKey])
 
   async function handleAddSet(exerciseId: string) {
     const updated = await store.logSet(session.id, exerciseId)

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { PageHeading } from '@/components/ui/page-heading'
 import { SectionLabel } from '@/components/ui/section-label'
+import { useDismissOnBack } from '@/lib/useDismissOnBack'
 import type { Exercise, Session } from '@/store'
 import { AddExercisePicker } from './AddExercisePicker'
 import { SessionExerciseCard } from './SessionExerciseCard'
@@ -34,6 +35,7 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
   // Notes draft and every field below stay mounted while an Exercise is chosen.
   const [isPicking, setIsPicking] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
+  useDismissOnBack(isPicking, () => setIsPicking(false))
 
   async function handlePick(exerciseId: string) {
     await handleAddExercise(exerciseId)

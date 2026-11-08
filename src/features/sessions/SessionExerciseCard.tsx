@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
-  carriesMeasurement,
+  hasEnteredAnything,
   resolveExerciseDisplayName,
   type Exercise,
   type SessionExerciseEntry,
@@ -136,10 +136,10 @@ export function SessionExerciseCard({
   const liveExercise = exercises.find((exercise) => exercise.id === entry.exerciseId)
   const groups = groupSessionSets(entry.sets)
   const ghosts = resolveGhostSets(entry.sets, liveExercise, carriedSets)
-  // Same test the Store's removal applies, so the button is never offered for a
-  // removal it would refuse — and a half-typed number keeps the Exercise in place.
+  // The Store's own test for removal, so the button is never offered for a removal
+  // it would refuse — and a half-typed number keeps the Exercise in place.
   const removeExercise =
-    entry.addedMidSession && !entry.sets.some(carriesMeasurement) ? onRemoveExercise : undefined
+    entry.addedMidSession && !hasEnteredAnything(entry) ? onRemoveExercise : undefined
 
   function sideLetter(side: 'left' | 'right') {
     return side === 'left' ? 'L' : 'R'

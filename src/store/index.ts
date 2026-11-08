@@ -90,6 +90,16 @@ export function carriesMeasurement(set: SessionSet): boolean {
 }
 
 /**
+ * Whether the lifter has entered anything on an Exercise's entry — the one test for
+ * "used". End Session prunes by it, Remove refuses by it and the wrap-up offers by
+ * it, so a half-typed number is never discarded by one of them that another would
+ * have kept.
+ */
+export function hasEnteredAnything(entry: SessionExerciseEntry): boolean {
+  return entry.sets.some(carriesMeasurement)
+}
+
+/**
  * The Sets most recently performed for one Exercise, looked back through a
  * Workout's Sessions newest-first. Per-Exercise rather than per-Session because
  * untouched Sets are pruned at End Session: an Exercise skipped last week has no
@@ -465,9 +475,8 @@ export class Store {
 
   /**
    * Takes back an Added Exercise, for a mis-tap. Refuses once the lifter has entered
-   * anything on it — judged by the looser carriesMeasurement rather than isSetLogged,
-   * the same rule End Session prunes by, so a half-typed number is never discarded
-   * here that End Session would have kept. An Exercise the Workout listed is never
+   * anything on it (hasEnteredAnything) — the looser test rather than isSetLogged, so a
+   * half-typed number is never discarded here that End Session would have kept. An Exercise the Workout listed is never
    * removable: skipping it is a fact the Session keeps (ADR-0004).
    */
   async removeExerciseFromSession(sessionId: string, exerciseId: string): Promise<Session> {
@@ -478,7 +487,7 @@ export class Store {
       if (!entry.addedMidSession) {
         throw new Error(`Exercise ${exerciseId} came from the Workout and cannot be removed`)
       }
-      if (entry.sets.some(carriesMeasurement)) {
+      if (hasEnteredAnything(entry)) {
         throw new Error(`Exercise ${exerciseId} has entries and cannot be removed`)
       }
 
@@ -693,7 +702,7 @@ export class Store {
     const listed = new Set(workout.exerciseIds)
     const used = session.exercises.filter(
       (entry) =>
-        entry.addedMidSession && entry.sets.some(carriesMeasurement) && !listed.has(entry.exerciseId)
+        entry.addedMidSession && hasEnteredAnything(entry) && !listed.has(entry.exerciseId)
     )
     const resolved = await Promise.all(used.map((entry) => this.exercises.get(entry.exerciseId)))
     return resolved.filter((exercise) => exercise !== undefined)
