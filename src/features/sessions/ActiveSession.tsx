@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { PageHeading } from '@/components/ui/page-heading'
 import { SectionLabel } from '@/components/ui/section-label'
 import type { Exercise, Session } from '@/store'
+import { AddExercisePicker } from './AddExercisePicker'
 import { SessionExerciseCard } from './SessionExerciseCard'
+import { sessionExerciseDomId } from './sessionExerciseDomId'
 import { useSessionEditing } from './useSessionEditing'
 
 interface ActiveSessionProps {
@@ -21,9 +24,41 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
     handleSetPatch,
     handleAcceptGhostValues,
     handleDeleteSet,
+    handleAddExercise,
+    handleRemoveExercise,
     handleNotesBlur,
   } =
     useSessionEditing(session, onChange)
+
+  // The picker is a view swap inside this component rather than a route, so the
+  // Notes draft and every field below stay mounted while an Exercise is chosen.
+  const [isPicking, setIsPicking] = useState(false)
+  const [justAddedId, setJustAddedId] = useState<string | null>(null)
+
+  async function handlePick(exerciseId: string) {
+    await handleAddExercise(exerciseId)
+    setJustAddedId(exerciseId)
+    setIsPicking(false)
+  }
+
+  // Waits for the list to be back on screen: the new card does not exist in the DOM
+  // while the picker is showing, and appears at the very end, below the fold.
+  useEffect(() => {
+    if (isPicking || justAddedId === null) return
+    document.getElementById(sessionExerciseDomId(justAddedId))?.scrollIntoView({ block: 'center' })
+    setJustAddedId(null)
+  }, [isPicking, justAddedId, session.exercises])
+
+  if (isPicking) {
+    return (
+      <AddExercisePicker
+        exercises={exercises}
+        inSessionIds={new Set(session.exercises.map((entry) => entry.exerciseId))}
+        onPick={(exerciseId) => void handlePick(exerciseId)}
+        onCancel={() => setIsPicking(false)}
+      />
+    )
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 p-4">
@@ -43,10 +78,21 @@ export function ActiveSession({ session, exercises, onChange, onEnd }: ActiveSes
               onSetPatch={handleSetPatch}
               onAcceptGhostValues={handleAcceptGhostValues}
               onDeleteSet={handleDeleteSet}
+              onRemoveExercise={(exerciseId) => void handleRemoveExercise(exerciseId)}
             />
           ))}
         </ul>
       )}
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setIsPicking(true)}
+        className="justify-between border-dashed text-muted-foreground"
+      >
+        <span>+ Add exercise</span>
+        <span>›</span>
+      </Button>
 
       <div>
         <SectionLabel>Notes</SectionLabel>

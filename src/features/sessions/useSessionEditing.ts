@@ -72,6 +72,16 @@ export function useSessionEditing(session: Session, onChange: (session: Session)
     onChange(updated)
   }
 
+  async function handleAddExercise(exerciseId: string) {
+    const updated = await store.addExerciseToSession(session.id, exerciseId)
+    onChange(updated)
+  }
+
+  async function handleRemoveExercise(exerciseId: string) {
+    const updated = await store.removeExerciseFromSession(session.id, exerciseId)
+    onChange(updated)
+  }
+
   async function handleNotesBlur() {
     const updated = await store.updateSessionNotes(session.id, notes)
     onChange(updated)
@@ -85,6 +95,8 @@ export function useSessionEditing(session: Session, onChange: (session: Session)
     handleSetPatch,
     handleAcceptGhostValues,
     handleDeleteSet,
+    handleAddExercise,
+    handleRemoveExercise,
     handleNotesBlur,
   }
 }

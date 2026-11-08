@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { SectionLabel } from '@/components/ui/section-label'
 import { ExerciseBadges, ExerciseBrowser } from '@/features/exercises/ExerciseBrowser'
+import { useDismissOnBack } from '@/lib/useDismissOnBack'
 import type { Exercise, Workout } from '@/store'
 import { exerciseNameById } from './exerciseLookup'
 
@@ -22,26 +23,7 @@ export function WorkoutForm({ allExercises, workout, onSave, onCancel }: Workout
 
   const selectedIds = new Set(exerciseIds)
 
-  /**
-   * The picker is a view swap rather than a route, so Android's back button
-   * would otherwise close the whole PWA from it. Push a history entry on open
-   * and treat popping it as Done; closing any other way consumes that entry so
-   * repeated opens don't stack up dead back presses.
-   */
-  useEffect(() => {
-    if (!isPicking) return
-    window.history.pushState(null, '')
-    let closedByBackButton = false
-    function handlePopState() {
-      closedByBackButton = true
-      setIsPicking(false)
-    }
-    window.addEventListener('popstate', handlePopState)
-    return () => {
-      window.removeEventListener('popstate', handlePopState)
-      if (!closedByBackButton) window.history.back()
-    }
-  }, [isPicking])
+  useDismissOnBack(isPicking, () => setIsPicking(false))
 
   function toggleExercise(id: string, checked: boolean) {
     setExerciseIds((current) =>
