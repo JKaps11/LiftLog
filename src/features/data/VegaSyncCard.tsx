@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SectionLabel } from '@/components/ui/section-label'
 import { vegaSync } from '@/vega/instance'
-import { readVegaUrl, type VegaSyncStatus } from '@/vega/sync'
+import { parseVegaSettings, type VegaSyncStatus } from '@/vega/sync'
 
 function describeStatus(status: VegaSyncStatus | null): string | null {
   if (status === null) return null
@@ -20,49 +20,43 @@ function describeStatus(status: VegaSyncStatus | null): string | null {
  * shown again, and leaving the field blank keeps it.
  */
 export function VegaSyncCard() {
-  const saved = vegaSync.settings()
+  const [saved, setSaved] = useState(vegaSync.settings)
   const [url, setUrl] = useState(saved?.url ?? '')
   const [token, setToken] = useState('')
-  const [isConnected, setIsConnected] = useState(saved !== null)
   const [status, setStatus] = useState(vegaSync.status)
   const [error, setError] = useState<string | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
+  const isConnected = saved !== null
 
   async function syncNow() {
     setIsSyncing(true)
     try {
-      setStatus(await vegaSync.sync('manual'))
+      const result = await vegaSync.sync('manual')
+      if (result.kind === 'recorded') setStatus(result.status)
     } finally {
       setIsSyncing(false)
     }
   }
 
   async function handleSave() {
-    let address: string
-    try {
-      address = readVegaUrl(url)
-    } catch (invalid) {
-      setError((invalid as Error).message)
-      return
-    }
-    const nextToken = token.trim() || saved?.token
-    if (!nextToken) {
-      setError('Enter the vega_pat_… token minted for LiftLog.')
+    const parsed = parseVegaSettings(url, token, saved)
+    if (parsed.kind === 'invalid') {
+      setError(parsed.message)
       return
     }
     setError(null)
-    vegaSync.save({ url: address, token: nextToken })
-    setUrl(address)
+    vegaSync.save(parsed.settings)
+    setSaved(parsed.settings)
+    setUrl(parsed.settings.url)
     setToken('')
-    setIsConnected(true)
     await syncNow()
   }
 
   function handleDisconnect() {
     vegaSync.disconnect()
+    setSaved(null)
     setUrl('')
     setToken('')
-    setIsConnected(false)
     setStatus(null)
     setError(null)
   }

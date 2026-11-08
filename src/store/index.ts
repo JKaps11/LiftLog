@@ -161,6 +161,18 @@ export function isSetLogged(exercise: Exercise | undefined, set: SessionSet): bo
     : set.weight !== undefined && set.reps !== undefined
 }
 
+/**
+ * Whether a Set is a timed hold rather than weight × reps. The live Exercise
+ * decides (ADR-0005). Once the Exercise has been deleted there is nothing to look
+ * up, so the Set's own measurements decide: a duration means timed. That fallback
+ * is exact for every Logged Set; a Pending Set of a deleted Exercise reads as
+ * weighted. Showing a Set and sending it to Vega both go through this, so a Set
+ * is never shown in one shape and sent in the other.
+ */
+export function isTimedSet(exercise: Exercise | undefined, set: SessionSet): boolean {
+  return exercise ? exercise.isTimed : set.durationSeconds !== undefined
+}
+
 export class Store {
   private readonly exercises: EntityTable<Exercise>
   private readonly workouts: EntityTable<Workout>
