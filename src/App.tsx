@@ -8,6 +8,7 @@ import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { ThemePage } from '@/features/theme/ThemePage'
 import { WorkoutsPage } from '@/features/workouts/WorkoutsPage'
 import { useTheme } from '@/theme/useTheme'
+import { useSyncOnOpen } from '@/vega/useSyncOnOpen'
 
 type Tab = 'session' | 'history' | 'workouts' | 'exercises' | 'data' | 'theme'
 
@@ -23,6 +24,7 @@ const TABS: { id: Tab; label: string; icon: typeof Dumbbell }[] = [
 function App() {
   const [tab, setTab] = useState<Tab>('session')
   const { themeId, setThemeId, themes } = useTheme()
+  useSyncOnOpen()
 
   return (
     <div className="flex min-h-svh flex-col bg-background">

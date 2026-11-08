@@ -2,12 +2,10 @@ import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { PageHeading } from '@/components/ui/page-heading'
 import { SectionLabel } from '@/components/ui/section-label'
+import { isRecord } from '@/lib/isRecord'
 import { store } from '@/store/instance'
 import type { ExportedData } from '@/store'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
+import { VegaSyncCard } from './VegaSyncCard'
 
 function isExercise(value: unknown): boolean {
   return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string'
@@ -145,6 +143,8 @@ export function DataPage() {
       </div>
 
       {status && <p className="text-sm text-muted-foreground">{status}</p>}
+
+      <VegaSyncCard />
     </main>
   )
 }

@@ -1,4 +1,4 @@
-import { isSetLogged, type Exercise, type SessionSet, type SetMeasurements } from '@/store'
+import { isSetLogged, isTimedSet, type Exercise, type SessionSet, type SetMeasurements } from '@/store'
 import { groupSessionSets, type SessionSetGroup } from './sessionSetGrouping'
 
 /** Which measurement fields a Set row shows: a single duration, or weight x reps. */
@@ -23,13 +23,11 @@ export interface SetRowDisplay {
  * Resolves a Set row's layout from the *live* Exercise rather than from which
  * measurement fields the Set happens to carry (ADR-0005) — a Pending Set
  * carries none, so field presence can't distinguish a pending hold from a
- * pending lift. Falls back to the Set's own measurements when the Exercise has
- * been deleted, mirroring resolveExerciseDisplayName; that fallback is exact for
- * every Logged Set, and a Pending Set of a deleted Exercise lands on weighted.
+ * pending lift. The rule and its fallback for a deleted Exercise belong to
+ * isTimedSet, which the sync to Vega reads too.
  */
 export function resolveSetLayout(exercise: Exercise | undefined, set: SessionSet): SetLayout {
-  if (exercise) return exercise.isTimed ? 'timed' : 'weighted'
-  return set.durationSeconds !== undefined ? 'timed' : 'weighted'
+  return isTimedSet(exercise, set) ? 'timed' : 'weighted'
 }
 
 /** Picks the Set within a source group that should hint `set` — the same side where both are pairs, otherwise the group's first. */
