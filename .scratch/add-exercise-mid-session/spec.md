@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # Add an Exercise mid-Session — Spec
 
@@ -61,7 +61,7 @@ When the Session ends, a wrap-up screen offers the Added Exercises that were act
 - Snapshots the Exercise's current name onto the entry, appends it at the end, and marks it as added.
 - Builds its Sets with the existing Carried-Over Shape rules, unchanged: the count comes from the most recent Session of this Workout that Logged the Exercise (one Logical Set if there is none), and solo-versus-pair comes from the Exercise as configured now. No new rules.
 
-**Store: remove.** A new Store operation removes an Added Exercise from a Session. Permitted only for an entry marked as added that has no Logged Sets (judged by the Exercise as configured now, as in ADR-0005); throws otherwise. It cannot remove a Workout Exercise.
+**Store: remove.** A new Store operation removes an Added Exercise from a Session. Permitted only for an entry marked as added that has no Set carrying any measurement (the same test End Session prunes by, so a half-entered Set also blocks removal and no typed number is ever discarded); throws otherwise. It cannot remove a Workout Exercise.
 
 **End Session.** Pruning gains one rule: after untouched Sets are dropped, an Added Exercise left with no Sets is removed from the Session. A Workout Exercise left with no Sets keeps its empty entry, as today (ADR-0004). A half-entered Set still survives pruning, so an Added Exercise holding one is kept.
 
@@ -79,7 +79,7 @@ When the Session ends, a wrap-up screen offers the Added Exercises that were act
 - Header carries a label and a Cancel button.
 - Android back closes the picker. The history-entry behaviour currently written inline in the Workout form is extracted into a small shared hook used by both, so there is one copy.
 
-**UI: Added Exercise card.** Appended last, scrolled into view, with a small "Added" tag. Shows a Remove action while it has no Logged Sets.
+**UI: Added Exercise card.** Appended last, scrolled into view, with a small "Added" tag. Shows a Remove action while nothing has been entered on it.
 
 **UI: wrap-up.** `SessionsPage` gains a third view between "active" and "pick". Tapping End Session ends and prunes the Session first (as now), then asks the Store for the offer. If the offer is empty it goes straight back to the Workout list. Otherwise the wrap-up shows each offered Exercise as an unchecked row, with Save and Skip. Save calls the keep operation with the ticked ids (Save with nothing ticked behaves like Skip); either way the view returns to the Workout list. Nothing about the offer is stored. If the app is closed on this screen, the offer is simply gone.
 
@@ -99,7 +99,7 @@ When the Session ends, a wrap-up screen offers the Added Exercises that were act
 - The Workout is unchanged by adding.
 - Ghost Values are found for an Added Exercise once an earlier Session of this Workout logged it, and not found when only another Workout did.
 - Concurrent add and set-update compose without losing either write.
-- Remove works for an Added Exercise with no Logged Sets; refuses once a Set is Logged; refuses a Workout Exercise.
+- Remove works for an Added Exercise with no Logged Sets; refuses once any measurement is entered, including a half-entered Set; refuses a Workout Exercise.
 - End Session: an unused Added Exercise is dropped, a skipped Workout Exercise keeps its empty entry, an Added Exercise with a half-entered Set is kept.
 - Offer: returns used Added Exercises in Session order; excludes ones with no Sets, ones already in the Workout, deleted Exercises, and everything when the Workout is gone.
 - Keep: appends in Session order, ignores ids not on offer, never duplicates on a second call, leaves the Session unchanged (including the added flag).
