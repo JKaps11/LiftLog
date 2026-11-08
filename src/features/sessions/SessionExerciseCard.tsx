@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
+  hasEnteredAnything,
   resolveExerciseDisplayName,
   type Exercise,
   type SessionExerciseEntry,
   type SessionSet,
   type SetMeasurements,
 } from '@/store'
+import { sessionExerciseDomId } from './sessionExerciseDomId'
 import { groupSessionSets } from './sessionSetGrouping'
 import { acceptGhostValues, resolveGhostSets, resolveSetRow, type SetField } from './setDisplay'
 
@@ -24,6 +26,11 @@ interface SessionExerciseCardProps {
   /** Offers Ghost Values to one Set; only the measurements it is still missing are taken. */
   onAcceptGhostValues: (exerciseId: string, setIndex: number, values: SetMeasurements) => void
   onDeleteSet: (exerciseId: string, setIndex: number) => void
+  /**
+   * Takes back an Added Exercise that nothing has been entered on. Left out where the
+   * screen has no such action, in which case no Remove is offered.
+   */
+  onRemoveExercise?: (exerciseId: string) => void
 }
 
 /**
@@ -123,11 +130,16 @@ export function SessionExerciseCard({
   onSetPatch,
   onAcceptGhostValues,
   onDeleteSet,
+  onRemoveExercise,
 }: SessionExerciseCardProps) {
   const displayName = resolveExerciseDisplayName(exercises, entry)
   const liveExercise = exercises.find((exercise) => exercise.id === entry.exerciseId)
   const groups = groupSessionSets(entry.sets)
   const ghosts = resolveGhostSets(entry.sets, liveExercise, carriedSets)
+  // The Store's own test for removal, so the button is never offered for a removal
+  // it would refuse — and a half-typed number keeps the Exercise in place.
+  const removeExercise =
+    entry.addedMidSession && !hasEnteredAnything(entry) ? onRemoveExercise : undefined
 
   function sideLetter(side: 'left' | 'right') {
     return side === 'left' ? 'L' : 'R'
@@ -146,8 +158,30 @@ export function SessionExerciseCard({
   }
 
   return (
-    <li className="rounded-lg border border-border bg-card p-3">
-      <h2 className="mb-3 text-base font-semibold tracking-tight">{displayName}</h2>
+    <li
+      id={sessionExerciseDomId(entry.exerciseId)}
+      className="rounded-lg border border-border bg-card p-3"
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="text-base font-semibold tracking-tight">{displayName}</h2>
+        {entry.addedMidSession && (
+          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            Added
+          </span>
+        )}
+        {removeExercise && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="ml-auto"
+            aria-label={`Remove ${displayName}`}
+            onClick={() => removeExercise(entry.exerciseId)}
+          >
+            <X />
+          </Button>
+        )}
+      </div>
       {entry.sets.length > 0 && (
         <ul className="flex flex-col gap-2">
           {groups.map((group, groupIndex) =>

@@ -92,11 +92,18 @@ export function withoutAbsentMeasurements(set: SessionSet): SessionSet {
  * exerciseNameAtLogTime is a denormalized fallback for display only — used when
  * the referenced Exercise has since been deleted. Prefer a live lookup by
  * exerciseId when the Exercise still exists (see resolveExerciseDisplayName).
+ *
+ * addedMidSession marks an Added Exercise: one put into the Session that its
+ * Workout didn't list. Absent means the Workout listed it. It is stored rather
+ * than derived by comparing against the Workout's current Exercise list, because
+ * the Workout can be edited later and a Session must stay correct regardless
+ * (ADR-0001). It stays set even if the Exercise is later kept in the Workout.
  */
 export interface SessionExerciseEntry {
   exerciseId: string
   exerciseNameAtLogTime: string
   sets: SessionSet[]
+  addedMidSession?: true
 }
 
 /**

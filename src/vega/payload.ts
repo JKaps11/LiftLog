@@ -42,7 +42,9 @@ export function payloadForVega(data: ExportedData): ExportedData {
 function withPerformedSets(session: Session, exercisesById: Map<string, Exercise>): Session {
   return {
     ...session,
-    exercises: session.exercises.map((entry) => {
+    exercises: session.exercises.map(({ addedMidSession: _addedMidSession, ...entry }) => {
+      // The Added Exercise flag is LiftLog's own bookkeeping (ADR-0006), not part of
+      // what Vega reads, and Vega refuses a whole export over what it doesn't.
       const exercise = exercisesById.get(entry.exerciseId)
       return {
         ...entry,

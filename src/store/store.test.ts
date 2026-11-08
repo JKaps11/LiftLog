@@ -898,6 +898,328 @@ describe('Store', () => {
     })
   })
 
+  describe('addExerciseToSession (Added Exercises)', () => {
+    it('appends the Exercise as an Added Exercise with one Pending Set, leaving the Workout alone', async () => {
+      const bench = await createExercise('Bench Press')
+      const facePull = await createExercise('Face Pull')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.addExerciseToSession(session.id, facePull.id)
+
+      expect(updated.exercises).toEqual([
+        { exerciseId: bench.id, exerciseNameAtLogTime: 'Bench Press', sets: [pendingSet()] },
+        {
+          exerciseId: facePull.id,
+          exerciseNameAtLogTime: 'Face Pull',
+          sets: [pendingSet()],
+          addedMidSession: true,
+        },
+      ])
+      expect((await sessions.get(session.id))?.exercises).toEqual(updated.exercises)
+      expect((await workouts.get(workout.id))?.exerciseIds).toEqual([bench.id])
+    })
+
+    it('opens with the Carried-Over Shape when an earlier Session of this Workout Logged the Exercise', async () => {
+      vi.useFakeTimers()
+      try {
+        const bench = await createExercise('Bench Press')
+        const facePull = await createExercise('Face Pull')
+        const workout = await store.createWorkout('Push Day', [bench.id])
+
+        const first = await store.startSession(workout.id)
+        await store.addExerciseToSession(first.id, facePull.id)
+        await store.updateSet(first.id, facePull.id, 0, { weight: 30, reps: 15 })
+        await store.logSet(first.id, facePull.id, { weight: 30, reps: 12 })
+        await store.logSet(first.id, facePull.id, { weight: 25, reps: 12 })
+        await store.endSession(first.id)
+
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const second = await store.startSession(workout.id)
+        const updated = await store.addExerciseToSession(second.id, facePull.id)
+
+        expect(updated.exercises[1].sets).toEqual([pendingSet(), pendingSet(), pendingSet()])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('opens a unilateral Exercise as left/right pairs and a first-time one as a single pair', async () => {
+      const row = await createExercise('Single Arm Row', { isUnilateral: true })
+      const workout = await store.createWorkout('Pull Day', [])
+      const session = await store.startSession(workout.id)
+
+      const updated = await store.addExerciseToSession(session.id, row.id)
+
+      expect(updated.exercises[0].sets).toEqual([
+        { side: 'left' },
+        { side: 'right' },
+      ])
+    })
+
+    it('rejects an Exercise that does not exist, leaving the Session as it was', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      await expect(store.addExerciseToSession(session.id, 'missing-id')).rejects.toThrow()
+
+      expect((await sessions.get(session.id))?.exercises).toEqual([])
+    })
+
+    it('rejects an Exercise already in the Session, whether planned or added', async () => {
+      const bench = await createExercise('Bench Press')
+      const facePull = await createExercise('Face Pull')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.addExerciseToSession(session.id, facePull.id)
+
+      await expect(store.addExerciseToSession(session.id, bench.id)).rejects.toThrow()
+      await expect(store.addExerciseToSession(session.id, facePull.id)).rejects.toThrow()
+
+      expect((await sessions.get(session.id))?.exercises).toHaveLength(2)
+    })
+
+    it('rejects adding to a Session that does not exist', async () => {
+      const bench = await createExercise('Bench Press')
+
+      await expect(store.addExerciseToSession('missing-id', bench.id)).rejects.toThrow()
+    })
+
+    it('gives an Added Exercise Ghost Values from this Workout’s history, and none from another Workout’s', async () => {
+      vi.useFakeTimers()
+      try {
+        const facePull = await createExercise('Face Pull')
+        const pushDay = await store.createWorkout('Push Day', [])
+        const pullDay = await store.createWorkout('Pull Day', [facePull.id])
+
+        const elsewhere = await store.startSession(pullDay.id)
+        await store.updateSet(elsewhere.id, facePull.id, 0, { weight: 40, reps: 10 })
+        await store.endSession(elsewhere.id)
+
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const first = await store.startSession(pushDay.id)
+        await store.addExerciseToSession(first.id, facePull.id)
+        expect((await store.getCarriedOverSets(first.id))[facePull.id]).toBeUndefined()
+        await store.updateSet(first.id, facePull.id, 0, { weight: 30, reps: 15 })
+        await store.endSession(first.id)
+
+        vi.setSystemTime(new Date(Date.now() + 1000))
+        const second = await store.startSession(pushDay.id)
+        await store.addExerciseToSession(second.id, facePull.id)
+
+        expect((await store.getCarriedOverSets(second.id))[facePull.id]).toEqual([
+          { weight: 30, reps: 15 },
+        ])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('composes with a Set write fired at the same moment instead of losing either', async () => {
+      const bench = await createExercise('Bench Press')
+      const facePull = await createExercise('Face Pull')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await Promise.all([
+        store.updateSet(session.id, bench.id, 0, { weight: 135 }),
+        store.addExerciseToSession(session.id, facePull.id),
+      ])
+
+      const stored = await sessions.get(session.id)
+      expect(stored?.exercises.map((e) => e.exerciseId)).toEqual([bench.id, facePull.id])
+      expect(stored?.exercises[0].sets).toEqual([{ weight: 135 }])
+    })
+  })
+
+  describe('removeExerciseFromSession', () => {
+    it('removes an Added Exercise nothing has been entered on, and persists the removal', async () => {
+      const bench = await createExercise('Bench Press')
+      const facePull = await createExercise('Face Pull')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.addExerciseToSession(session.id, facePull.id)
+      await store.logSet(session.id, facePull.id)
+
+      const updated = await store.removeExerciseFromSession(session.id, facePull.id)
+
+      expect(updated.exercises.map((e) => e.exerciseId)).toEqual([bench.id])
+      expect((await sessions.get(session.id))?.exercises).toEqual(updated.exercises)
+    })
+
+    it('refuses once any measurement has been entered, including a half-entered Set', async () => {
+      const facePull = await createExercise('Face Pull')
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+      await store.addExerciseToSession(session.id, facePull.id)
+      await store.updateSet(session.id, facePull.id, 0, { weight: 30 })
+
+      await expect(store.removeExerciseFromSession(session.id, facePull.id)).rejects.toThrow()
+
+      expect((await sessions.get(session.id))?.exercises).toHaveLength(1)
+    })
+
+    it('refuses to remove an Exercise the Workout listed', async () => {
+      const bench = await createExercise('Bench Press')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+
+      await expect(store.removeExerciseFromSession(session.id, bench.id)).rejects.toThrow()
+
+      expect((await sessions.get(session.id))?.exercises).toHaveLength(1)
+    })
+
+    it('rejects an Exercise that is not in the Session', async () => {
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+
+      await expect(store.removeExerciseFromSession(session.id, 'missing-id')).rejects.toThrow()
+    })
+  })
+
+  describe('keeping Added Exercises in the Workout', () => {
+    /** An ended Push Day that planned only Bench Press and added Face Pull then Curl, using both. */
+    async function endedSessionThatAdded() {
+      const bench = await createExercise('Bench Press')
+      const facePull = await createExercise('Face Pull')
+      const curl = await createExercise('Curl')
+      const workout = await store.createWorkout('Push Day', [bench.id])
+      const session = await store.startSession(workout.id)
+      await store.addExerciseToSession(session.id, facePull.id)
+      await store.addExerciseToSession(session.id, curl.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 135, reps: 8 })
+      await store.updateSet(session.id, facePull.id, 0, { weight: 30, reps: 15 })
+      await store.updateSet(session.id, curl.id, 0, { weight: 20, reps: 10 })
+      await store.endSession(session.id)
+      return { bench, facePull, curl, workout, session }
+    }
+
+    describe('getAddedExercisesToKeep', () => {
+      it('offers the Added Exercises that were used, in the order they were added, and never planned ones', async () => {
+        const { facePull, curl, session } = await endedSessionThatAdded()
+
+        const offered = await store.getAddedExercisesToKeep(session.id)
+
+        expect(offered.map((exercise) => exercise.id)).toEqual([facePull.id, curl.id])
+      })
+
+      it('does not offer an Added Exercise dropped at End Session for having no Sets', async () => {
+        const facePull = await createExercise('Face Pull')
+        const workout = await store.createWorkout('Push Day', [])
+        const session = await store.startSession(workout.id)
+        await store.addExerciseToSession(session.id, facePull.id)
+        await store.endSession(session.id)
+
+        expect(await store.getAddedExercisesToKeep(session.id)).toEqual([])
+      })
+
+      it('does not offer one the Workout lists by now, reading the Workout live', async () => {
+        const { facePull, curl, workout, session } = await endedSessionThatAdded()
+        await store.updateWorkout(workout.id, { exerciseIds: [...workout.exerciseIds, facePull.id] })
+
+        const offered = await store.getAddedExercisesToKeep(session.id)
+
+        expect(offered.map((exercise) => exercise.id)).toEqual([curl.id])
+      })
+
+      it('does not offer an Exercise that has since been deleted', async () => {
+        const { facePull, curl, session } = await endedSessionThatAdded()
+        await store.deleteExercise(facePull.id)
+
+        const offered = await store.getAddedExercisesToKeep(session.id)
+
+        expect(offered.map((exercise) => exercise.id)).toEqual([curl.id])
+      })
+
+      it('offers nothing when the Workout has since been deleted', async () => {
+        const { workout, session } = await endedSessionThatAdded()
+        await store.deleteWorkout(workout.id)
+
+        expect(await store.getAddedExercisesToKeep(session.id)).toEqual([])
+      })
+
+      it('rejects a Session that does not exist', async () => {
+        await expect(store.getAddedExercisesToKeep('missing-id')).rejects.toThrow()
+      })
+    })
+
+    describe('keepAddedExercisesInWorkout', () => {
+      it('appends the chosen Exercises to the end of the Workout in the order they were added, not the order given', async () => {
+        const { bench, facePull, curl, workout, session } = await endedSessionThatAdded()
+
+        await store.keepAddedExercisesInWorkout(session.id, [curl.id, facePull.id])
+
+        expect((await workouts.get(workout.id))?.exerciseIds).toEqual([bench.id, facePull.id, curl.id])
+      })
+
+      it('keeps only what was chosen', async () => {
+        const { bench, curl, workout, session } = await endedSessionThatAdded()
+
+        await store.keepAddedExercisesInWorkout(session.id, [curl.id])
+
+        expect((await workouts.get(workout.id))?.exerciseIds).toEqual([bench.id, curl.id])
+      })
+
+      it('ignores ids that are not on offer, such as a planned Exercise or an unknown id', async () => {
+        const { bench, curl, workout, session } = await endedSessionThatAdded()
+
+        await store.keepAddedExercisesInWorkout(session.id, [bench.id, 'missing-id', curl.id])
+
+        expect((await workouts.get(workout.id))?.exerciseIds).toEqual([bench.id, curl.id])
+      })
+
+      it('does not duplicate an Exercise when called twice', async () => {
+        const { bench, facePull, workout, session } = await endedSessionThatAdded()
+
+        await store.keepAddedExercisesInWorkout(session.id, [facePull.id])
+        await store.keepAddedExercisesInWorkout(session.id, [facePull.id])
+
+        expect((await workouts.get(workout.id))?.exerciseIds).toEqual([bench.id, facePull.id])
+      })
+
+      it('leaves the Session exactly as it was, Added flag included', async () => {
+        const { facePull, session } = await endedSessionThatAdded()
+        const before = await sessions.get(session.id)
+
+        await store.keepAddedExercisesInWorkout(session.id, [facePull.id])
+
+        expect(await sessions.get(session.id)).toEqual(before)
+        expect(before?.exercises[1].addedMidSession).toBe(true)
+      })
+
+      it('is a no-op when the Workout has been deleted', async () => {
+        const { facePull, workout, session } = await endedSessionThatAdded()
+        await store.deleteWorkout(workout.id)
+
+        await store.keepAddedExercisesInWorkout(session.id, [facePull.id])
+
+        expect(await workouts.get(workout.id)).toBeUndefined()
+      })
+
+      it('makes the next Session open with the Exercise listed, in the shape it was last done', async () => {
+        vi.useFakeTimers()
+        try {
+          const { bench, facePull, workout, session } = await endedSessionThatAdded()
+          await store.logSet(session.id, facePull.id, { weight: 30, reps: 12 })
+          await store.keepAddedExercisesInWorkout(session.id, [facePull.id])
+
+          vi.setSystemTime(new Date(Date.now() + 1000))
+          const next = await store.startSession(workout.id)
+
+          expect(next.exercises.map((e) => e.exerciseId)).toEqual([bench.id, facePull.id])
+          expect(next.exercises[1].sets).toEqual([pendingSet(), pendingSet()])
+          expect(next.exercises[1].addedMidSession).toBeUndefined()
+          expect((await store.getCarriedOverSets(next.id))[facePull.id]).toEqual([
+            { weight: 30, reps: 15 },
+            { weight: 30, reps: 12 },
+          ])
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+    })
+  })
+
   describe('endSession (pruning Pending Sets)', () => {
     it('drops Sets that were never touched', async () => {
       const bench = await createExercise('Bench Press')
@@ -956,6 +1278,49 @@ describe('Store', () => {
       expect(ended.exercises).toHaveLength(2)
       expect(ended.exercises[1].exerciseId).toBe(ohp.id)
       expect(ended.exercises[1].sets).toEqual([])
+    })
+
+    it('drops an Added Exercise left with no Sets, unlike a skipped Workout Exercise', async () => {
+      const bench = await createExercise('Bench Press')
+      const ohp = await createExercise('Overhead Press')
+      const facePull = await createExercise('Face Pull')
+      const workout = await store.createWorkout('Push Day', [bench.id, ohp.id])
+      const session = await store.startSession(workout.id)
+      await store.addExerciseToSession(session.id, facePull.id)
+      await store.updateSet(session.id, bench.id, 0, { weight: 135, reps: 8 })
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.exercises.map((e) => e.exerciseId)).toEqual([bench.id, ohp.id])
+      expect((await sessions.get(session.id))?.exercises).toEqual(ended.exercises)
+    })
+
+    it('keeps an Added Exercise that has Sets left, flag included, even a half-entered one', async () => {
+      const facePull = await createExercise('Face Pull')
+      const curl = await createExercise('Curl')
+      const workout = await store.createWorkout('Push Day', [])
+      const session = await store.startSession(workout.id)
+      await store.addExerciseToSession(session.id, facePull.id)
+      await store.addExerciseToSession(session.id, curl.id)
+      await store.updateSet(session.id, facePull.id, 0, { weight: 30, reps: 15 })
+      await store.updateSet(session.id, curl.id, 0, { weight: 20 })
+
+      const ended = await store.endSession(session.id)
+
+      expect(ended.exercises).toEqual([
+        {
+          exerciseId: facePull.id,
+          exerciseNameAtLogTime: 'Face Pull',
+          sets: [{ weight: 30, reps: 15 }],
+          addedMidSession: true,
+        },
+        {
+          exerciseId: curl.id,
+          exerciseNameAtLogTime: 'Curl',
+          sets: [{ weight: 20 }],
+          addedMidSession: true,
+        },
+      ])
     })
 
     it('persists the pruned Session rather than only returning it', async () => {

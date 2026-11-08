@@ -90,6 +90,16 @@ export function carriesMeasurement(set: SessionSet): boolean {
 }
 
 /**
+ * Whether the lifter has entered anything on an Exercise's entry — the one test for
+ * "used". End Session prunes by it, Remove refuses by it and the wrap-up offers by
+ * it, so a half-typed number is never discarded by one of them that another would
+ * have kept.
+ */
+export function hasEnteredAnything(entry: SessionExerciseEntry): boolean {
+  return entry.sets.some(carriesMeasurement)
+}
+
+/**
  * The Sets most recently performed for one Exercise, looked back through a
  * Workout's Sessions newest-first. Per-Exercise rather than per-Session because
  * untouched Sets are pruned at End Session: an Exercise skipped last week has no
@@ -431,6 +441,66 @@ export class Store {
   }
 
   /**
+   * Puts an Added Exercise into a running Session, at the end. The Workout is not
+   * touched: this is a change to today, not to the template.
+   *
+   * It opens like any Exercise a Session starts with — Pending Sets in the
+   * Carried-Over Shape (ADR-0004), looked up in this Workout's history only. An
+   * Exercise this Workout has never Logged opens with one Logical Set.
+   */
+  async addExerciseToSession(sessionId: string, exerciseId: string): Promise<Session> {
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const exercise = await this.exercises.get(exerciseId)
+      if (!exercise) throw new Error(`Exercise not found: ${exerciseId}`)
+      // Every Session operation identifies an entry by exerciseId, so a second entry
+      // for one Exercise would be unreachable for logging, editing and deleting Sets.
+      if (session.exercises.some((e) => e.exerciseId === exerciseId)) {
+        throw new Error(`Exercise ${exerciseId} is already part of session ${sessionId}`)
+      }
+
+      const history = await this.sessionsForWorkout(session.workoutId, sessionId)
+      const carried = lastLoggedSetsForExercise(history, exerciseId, exercise)
+      const entry: SessionExerciseEntry = {
+        exerciseId,
+        exerciseNameAtLogTime: exercise.name,
+        sets: materializePendingSets(countLogicalSets(carried), exercise.isUnilateral),
+        addedMidSession: true,
+      }
+      const updated: Session = { ...session, exercises: [...session.exercises, entry] }
+      await this.sessions.put(updated)
+      return updated
+    })
+  }
+
+  /**
+   * Takes back an Added Exercise, for a mis-tap. Refuses once the lifter has entered
+   * anything on it (hasEnteredAnything) — the looser test rather than isSetLogged, so a
+   * half-typed number is never discarded here that End Session would have kept. An Exercise the Workout listed is never
+   * removable: skipping it is a fact the Session keeps (ADR-0004).
+   */
+  async removeExerciseFromSession(sessionId: string, exerciseId: string): Promise<Session> {
+    return this.queueSessionWrite(async () => {
+      const session = await this.requireSession(sessionId)
+      const entry = session.exercises.find((e) => e.exerciseId === exerciseId)
+      if (!entry) throw new Error(`Exercise ${exerciseId} is not part of session ${sessionId}`)
+      if (!entry.addedMidSession) {
+        throw new Error(`Exercise ${exerciseId} came from the Workout and cannot be removed`)
+      }
+      if (hasEnteredAnything(entry)) {
+        throw new Error(`Exercise ${exerciseId} has entries and cannot be removed`)
+      }
+
+      const updated: Session = {
+        ...session,
+        exercises: session.exercises.filter((e) => e.exerciseId !== exerciseId),
+      }
+      await this.sessions.put(updated)
+      return updated
+    })
+  }
+
+  /**
    * Against a unilateral Exercise (checked live by exerciseId), appends a
    * left+right pair of Sets in one call instead of a single Set. When `set` is
    * omitted (the "Add set" path) the new Set is Pending — no measurements at all
@@ -572,18 +642,70 @@ export class Store {
    * An Exercise left with nothing keeps its entry with an empty Set list. The
    * entry is the ADR-0001 snapshot of what the Workout contained that day, so
    * dropping it would erase the fact that the Exercise was skipped.
+   *
+   * An Added Exercise left with nothing is the exception and is dropped outright:
+   * the Workout never listed it, so there was no plan for it to be skipped from.
    */
   async endSession(sessionId: string, endTime: string = new Date().toISOString()): Promise<Session> {
     return this.queueSessionWrite(async () => {
       const session = await this.requireSession(sessionId)
-      const exercises = session.exercises.map((entry) => ({
-        ...entry,
-        sets: entry.sets.filter(carriesMeasurement),
-      }))
+      const exercises = session.exercises
+        .map((entry) => ({ ...entry, sets: entry.sets.filter(carriesMeasurement) }))
+        .filter((entry) => !entry.addedMidSession || entry.sets.length > 0)
       const updated: Session = { ...session, exercises, endTime }
       await this.sessions.put(updated)
       return updated
     })
+  }
+
+  /**
+   * The Added Exercises of a Session worth offering to keep in its Workout, in the
+   * order they were added: ones that were used (an unused one is dropped at End
+   * Session, so none survive without Sets), that still exist, and that the Workout
+   * does not already list. The Workout is read live, not from the Session's
+   * snapshot — it may have been edited since, or deleted outright, in which case
+   * there is nothing to offer.
+   */
+  async getAddedExercisesToKeep(sessionId: string): Promise<Exercise[]> {
+    const session = await this.requireSession(sessionId)
+    return this.addedExercisesToKeep(session)
+  }
+
+  /**
+   * Appends the chosen Added Exercises to the end of the Session's Workout, in the
+   * order they were added in the Session rather than the order given. Re-derives
+   * what is on offer itself instead of trusting the caller's list, so an id that
+   * was never offered is ignored and a second call cannot duplicate an entry.
+   *
+   * The Session is not touched, flag included: it did add the Exercise that day, and
+   * Sessions don't change when a Workout does (ADR-0001). Only ever appends to the
+   * Workout — a Session never removes or reorders what the template lists.
+   */
+  async keepAddedExercisesInWorkout(sessionId: string, exerciseIds: string[]): Promise<void> {
+    const session = await this.requireSession(sessionId)
+    const workout = await this.workouts.get(session.workoutId)
+    if (!workout) return
+
+    const chosen = new Set(exerciseIds)
+    const toKeep = (await this.addedExercisesToKeep(session))
+      .map((exercise) => exercise.id)
+      .filter((id) => chosen.has(id))
+    if (toKeep.length === 0) return
+
+    await this.workouts.put({ ...workout, exerciseIds: [...workout.exerciseIds, ...toKeep] })
+  }
+
+  private async addedExercisesToKeep(session: Session): Promise<Exercise[]> {
+    const workout = await this.workouts.get(session.workoutId)
+    if (!workout) return []
+
+    const listed = new Set(workout.exerciseIds)
+    const used = session.exercises.filter(
+      (entry) =>
+        entry.addedMidSession && hasEnteredAnything(entry) && !listed.has(entry.exerciseId)
+    )
+    const resolved = await Promise.all(used.map((entry) => this.exercises.get(entry.exerciseId)))
+    return resolved.filter((exercise) => exercise !== undefined)
   }
 
   async updateSessionNotes(sessionId: string, notes: string): Promise<Session> {

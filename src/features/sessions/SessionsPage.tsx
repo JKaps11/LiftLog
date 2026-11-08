@@ -5,8 +5,12 @@ import { store } from '@/store/instance'
 import { vegaSync } from '@/vega/instance'
 import type { Exercise, Session, Workout } from '@/store'
 import { ActiveSession } from './ActiveSession'
+import { SessionWrapUp } from './SessionWrapUp'
 
-type View = { mode: 'pick' } | { mode: 'active'; session: Session }
+type View =
+  | { mode: 'pick' }
+  | { mode: 'active'; session: Session }
+  | { mode: 'wrap-up'; session: Session; offered: Exercise[] }
 
 export function SessionsPage() {
   const [workouts, setWorkouts] = useState<Workout[]>([])
@@ -39,14 +43,46 @@ export function SessionsPage() {
     setView({ mode: 'active', session })
   }
 
+  /**
+   * Ends the Session before asking anything, so the work is saved whatever happens
+   * on the wrap-up screen — closing the app there loses only the offer.
+   */
   async function handleEnd(session: Session) {
-    await store.endSession(session.id)
-    setView({ mode: 'pick' })
+    const ended = await store.endSession(session.id)
     void vegaSync.sync('session-ended')
+    // The offer is optional and the Session is already saved, so failing to work one
+    // out must not leave this screen showing an ended Session as if it were running.
+    const offered = await store.getAddedExercisesToKeep(ended.id).catch((error: unknown) => {
+      console.error('Could not work out which Added Exercises to offer', error)
+      return []
+    })
+    setView(offered.length > 0 ? { mode: 'wrap-up', session: ended, offered } : { mode: 'pick' })
+  }
+
+  async function handleKeep(session: Session, exerciseIds: string[]) {
+    try {
+      await store.keepAddedExercisesInWorkout(session.id, exerciseIds)
+      // The export carries Workouts too, and this just changed one.
+      void vegaSync.sync('session-ended')
+    } finally {
+      setView({ mode: 'pick' })
+    }
   }
 
   if (isLoading) {
     return <p className="p-4 text-muted-foreground">Loading…</p>
+  }
+
+  if (view.mode === 'wrap-up') {
+    const { session, offered } = view
+    return (
+      <SessionWrapUp
+        workoutName={session.workoutNameSnapshot}
+        offered={offered}
+        onKeep={(exerciseIds) => void handleKeep(session, exerciseIds)}
+        onSkip={() => setView({ mode: 'pick' })}
+      />
+    )
   }
 
   if (view.mode === 'active') {
