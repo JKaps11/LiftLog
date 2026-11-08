@@ -117,6 +117,26 @@ describe('payloadForVega', () => {
     ])
   })
 
+  it('sends an Added Exercise as an ordinary entry, without the flag Vega has no use for', () => {
+    const payload = payloadForVega(
+      exportOf([
+        session({
+          exercises: [
+            {
+              exerciseId: SQUAT.id,
+              exerciseNameAtLogTime: 'Squat',
+              sets: [{ weight: 225, reps: 5 }],
+              addedMidSession: true,
+            },
+          ],
+        }),
+      ])
+    )
+    expect(payload.sessions[0].exercises).toEqual([
+      { exerciseId: SQUAT.id, exerciseNameAtLogTime: 'Squat', sets: [{ weight: 225, reps: 5 }] },
+    ])
+  })
+
   it("reads a deleted Exercise's Set the way the Session screen shows it", () => {
     const payload = payloadForVega(
       exportOf([
