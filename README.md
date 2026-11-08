@@ -8,12 +8,13 @@ A minimal, single-user mobile PWA for building Workouts and logging how you actu
 - Start a **Session** against a Workout and log **Sets** (weight × reps) per Exercise — fields pre-fill from your last time doing that Workout.
 - Browse, edit, or delete past Sessions in **History**.
 - **Export/Import** your full dataset as a single JSON file, to back it up or move it to a new phone.
+- **Sync to Vega** (optional): give it a Vega address and device token on the Data page and it sends the export to Vega's `POST /api/ingest/liftlog` each time the app opens, so Vega's Workouts page stays current. Only finished Sessions and performed Sets are sent. The address and token are kept in `localStorage` on the device, never in this repo.
 
 See [`CONTEXT.md`](./CONTEXT.md) for the domain vocabulary (Workout / Session / Exercise / Set) and [`docs/adr/`](./docs/adr/) for the reasoning behind key decisions, like why a Session snapshots its Workout instead of referencing it live.
 
 ## Stack
 
-React + TypeScript + Vite, styled with Tailwind CSS + shadcn/ui. Data lives in IndexedDB via Dexie, behind a Dexie-independent `Store` module (`src/store/`) that the UI is built and tested against. `vite-plugin-pwa` handles installability and offline support. No server, no auth.
+React + TypeScript + Vite, styled with Tailwind CSS + shadcn/ui. Data lives in IndexedDB via Dexie, behind a Dexie-independent `Store` module (`src/store/`) that the UI is built and tested against. `vite-plugin-pwa` handles installability and offline support. No server, no auth. The one network call is the optional sync to Vega (`src/vega/`).
 
 ## Getting started
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { PageHeading } from '@/components/ui/page-heading'
 import { store } from '@/store/instance'
+import { vegaSync } from '@/vega/instance'
 import type { Exercise, Session, Workout } from '@/store'
 import { ActiveSession } from './ActiveSession'
 
@@ -41,6 +42,7 @@ export function SessionsPage() {
   async function handleEnd(session: Session) {
     await store.endSession(session.id)
     setView({ mode: 'pick' })
+    void vegaSync.sync('session-ended')
   }
 
   if (isLoading) {

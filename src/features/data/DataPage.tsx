@@ -4,6 +4,7 @@ import { PageHeading } from '@/components/ui/page-heading'
 import { SectionLabel } from '@/components/ui/section-label'
 import { store } from '@/store/instance'
 import type { ExportedData } from '@/store'
+import { VegaSyncCard } from './VegaSyncCard'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -145,6 +146,8 @@ export function DataPage() {
       </div>
 
       {status && <p className="text-sm text-muted-foreground">{status}</p>}
+
+      <VegaSyncCard />
     </main>
   )
 }
